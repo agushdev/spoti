@@ -19,6 +19,12 @@ type Track = {
   audio_url: string;
 };
 
+// Define el tipo de respuesta paginada, igual que en home/page.tsx
+type PagedTracksResponse = {
+  total: number;
+  items: Track[];
+};
+
 type AddTrackToPlaylistDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -43,8 +49,12 @@ export function AddTrackToPlaylistDialog({
   const fetchAvailableTracks = useCallback(async () => {
     setIsLoadingTracks(true);
     try {
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${typeof window !== 'undefined' ? window.location.hostname : '192.168.0.107'}:8000`;
-      const response = await fetch(`${apiBaseUrl}/api/tracks`, {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8000`; // Usar 'localhost' como fallback seguro
+      // ✅ IMPORTANTE: Añade parámetros de paginación para obtener todas las pistas disponibles si es necesario
+      // O ajusta el límite para que sea lo suficientemente grande para cubrir la mayoría de los casos.
+      // Para este diálogo, si quieres todas las pistas, puedes usar un límite grande o un endpoint sin paginar.
+      // Aquí, asumiremos un límite alto para simplificar y obtener la mayoría de las pistas.
+      const response = await fetch(`${apiBaseUrl}/api/tracks?limit=1000&offset=0`, { // Límite alto para obtener todas las pistas
         headers: { 'Accept': 'application/json' },
       });
       if (!response.ok) {
@@ -52,8 +62,9 @@ export function AddTrackToPlaylistDialog({
         console.error(`Error fetching tracks: Status: ${response.status}, Body: ${errorText}`);
         throw new Error("Failed to fetch available tracks.");
       }
-      const data: Track[] = await response.json();
-      setAvailableTracks(data);
+      // ✅ CAMBIO CLAVE: Acceder a 'data.items' porque la API ahora devuelve un objeto paginado
+      const pagedData: PagedTracksResponse = await response.json(); 
+      setAvailableTracks(pagedData.items); 
     } catch (error) {
       console.error("Error fetching available tracks:", error);
       toast.error("Error al cargar canciones disponibles.");
@@ -73,12 +84,16 @@ export function AddTrackToPlaylistDialog({
   const handleToggleSelect = (trackId: number) => {
     setSelectedTrackIds((prevSelected) => {
       const newSelected = new Set(prevSelected);
+      // Solo permite seleccionar si la canción NO está ya en la playlist actual
       if (!currentTracks.some(t => t.id === trackId)) {
         if (newSelected.has(trackId)) {
           newSelected.delete(trackId);
         } else {
           newSelected.add(trackId);
         }
+      } else {
+        // Opcional: Avisar al usuario si intenta seleccionar una canción ya existente
+        // toast.info("Esta canción ya está en la playlist.");
       }
       return newSelected;
     });
@@ -86,11 +101,12 @@ export function AddTrackToPlaylistDialog({
 
   const handleAddSelectedTracks = async () => {
     setIsAddingTracks(true);
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${typeof window !== 'undefined' ? window.location.hostname : '192.168.0.107'}:8000`;
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8000`;
     let addedCount = 0;
     let errorCount = 0;
 
     for (const trackId of Array.from(selectedTrackIds)) {
+      // Doble verificación para asegurar que la canción no esté ya en la playlist
       if (currentTracks.some(t => t.id === trackId)) {
         console.log(`Canción ${trackId} ya está en la playlist. Saltando adición.`);
         continue;
@@ -115,8 +131,8 @@ export function AddTrackToPlaylistDialog({
     }
 
     setIsAddingTracks(false);
-    onOpenChange(false);
-    onPlaylistUpdated();
+    onOpenChange(false); // Cierra el diálogo
+    onPlaylistUpdated(); // Recarga la playlist en la página de detalles
 
     if (addedCount > 0) {
       toast.success(`${addedCount} canción${addedCount === 1 ? '' : 'es'} añadida${addedCount === 1 ? '' : 's'} a la playlist.`, {
@@ -132,10 +148,12 @@ export function AddTrackToPlaylistDialog({
     }
   };
 
+  // Filtra las canciones disponibles que NO están ya en la playlist actual y que coinciden con el término de búsqueda
   const filteredTracks = availableTracks.filter((track) =>
-    track.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    !currentTracks.some(t => t.id === track.id) && // Excluye las canciones que ya están en la playlist
+    (track.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     track.artist.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    track.album.toLowerCase().includes(searchTerm.toLowerCase())
+    track.album.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const TrackListItem = ({ track }: { track: Track }) => {
@@ -158,12 +176,17 @@ export function AddTrackToPlaylistDialog({
     return (
       <div
         key={track.id}
+        // ✅ Deshabilita el clic si la canción ya está en la playlist
         className={cn(
           "flex items-center gap-3 p-2 rounded-lg transition-colors",
           alreadyInPlaylist ? "opacity-60 cursor-not-allowed bg-neutral-50" : "cursor-pointer hover:bg-neutral-100",
           isSelectedForNewAdd && "bg-blue-100/70"
         )}
-        onClick={() => handleToggleSelect(track.id)}
+        onClick={() => {
+          if (!alreadyInPlaylist) { // Solo permite la selección si no está ya en la playlist
+            handleToggleSelect(track.id);
+          }
+        }}
       >
         <div className="flex-shrink-0 relative size-12 rounded-md overflow-hidden bg-neutral-200">
           <Image
@@ -184,11 +207,11 @@ export function AddTrackToPlaylistDialog({
         </div>
         <div className="flex-shrink-0">
           {alreadyInPlaylist ? (
-            <Check className="size-5 text-green-600" />
+            <Check className="size-5 text-green-600" /> // Icono de check si ya está en la playlist
           ) : (
             <div className={cn(
               "size-5 rounded-full border border-neutral-400 flex items-center justify-center",
-              isSelectedForNewAdd && "bg-blue-500 border-blue-500"
+              isSelectedForNewAdd && "bg-blue-500 border-blue-500" // Círculo azul si está seleccionada
             )}>
               {isSelectedForNewAdd && <Check className="size-4 text-white" />}
             </div>
@@ -219,8 +242,12 @@ export function AddTrackToPlaylistDialog({
         <div className="flex-1 overflow-y-auto pr-2 -mr-2">
           {isLoadingTracks ? (
             <div className="text-center text-neutral-500 py-4">Cargando canciones...</div>
-          ) : filteredTracks.length === 0 ? (
-            <div className="text-center text-neutral-500 py-4">No se encontraron canciones.</div>
+          ) : filteredTracks.length === 0 && searchTerm !== "" ? ( // No hay resultados para la búsqueda
+            <div className="text-center text-neutral-500 py-4">No se encontraron canciones que coincidan con la búsqueda.</div>
+          ) : filteredTracks.length === 0 && availableTracks.length > 0 && searchTerm === "" ? ( // Todas ya están en la playlist
+            <div className="text-center text-neutral-500 py-4">Todas las canciones ya están en esta playlist.</div>
+          ) : filteredTracks.length === 0 && availableTracks.length === 0 && searchTerm === "" ? ( // No hay canciones en total
+            <div className="text-center text-neutral-500 py-4">No hay canciones disponibles para añadir.</div>
           ) : (
             <div className="space-y-2">
               {filteredTracks.map((track) => (
@@ -234,7 +261,7 @@ export function AddTrackToPlaylistDialog({
             onClick={handleAddSelectedTracks}
             disabled={selectedTrackIds.size === 0 || isAddingTracks}
           >
-            {isAddingTracks ? "Añadiendo..." : `Añadir (${selectedTrackIds.size}) canciones`}
+            {isAddingTracks ? "Añadiendo..." : `Añadir (${selectedTrackIds.size}) canción${selectedTrackIds.size === 1 ? '' : 'es'}`}
           </Button>
         </div>
       </DialogContent>

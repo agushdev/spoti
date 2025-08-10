@@ -43,9 +43,6 @@ export function FullScreenPlayer() {
   const defaultCover = "https://placehold.co/500x500/E0E0E0/A0A0A0?text=No+Cover";
   let playerCoverSource: string;
 
-  // ✅ Añadido console.log para ayudar a depurar la URL de la carátula
-  console.log("Current track data for FullScreenPlayer:", current);
-
   if (current && typeof current.artwork_url === 'string' && current.artwork_url.trim() !== '') {
     if (current.artwork_url.startsWith('http://') || current.artwork_url.startsWith('https://')) {
       playerCoverSource = current.artwork_url;
@@ -58,8 +55,6 @@ export function FullScreenPlayer() {
     }
   } else {
     playerCoverSource = defaultCover;
-    // ✅ Añadido console.log si se usa la carátula por defecto
-    console.log("Using default cover for FullScreenPlayer. artwork_url is missing/empty/invalid:", current?.artwork_url);
   }
 
   return (
@@ -70,8 +65,8 @@ export function FullScreenPlayer() {
           "fixed inset-0 w-screen h-screen p-0 m-0",
           // Flexbox para centrar y distribuir verticalmente el contenido
           "flex flex-col items-center justify-between",
-          // Fondo y color de texto para el estilo oscuro (Spotify-like)
-          "bg-black text-white",
+          // ✅ Fondo y color de texto para el estilo CLARO (ajustado de negro a blanco)
+          "bg-white text-black",
           // Sobreescribir estilos predeterminados de Radix UI para asegurar el fullscreen
           "!translate-x-0 !translate-y-0 !top-0 !left-0 !max-w-none rounded-none border-none",
           // Animación de entrada/salida (opcional, puedes ajustar si lo necesitas)
@@ -83,12 +78,12 @@ export function FullScreenPlayer() {
           <DialogTitle>Reproductor a Pantalla Completa</DialogTitle>
         </VisuallyHidden>
 
-        {/* Botón de Cerrar (arriba a la izquierda, el único) */}
+        {/* Botón de Cerrar (arriba a la izquierda) */}
         <Button
           variant="ghost"
           size="icon"
           onClick={togglePlayerExpansion}
-          className="absolute top-4 left-4 z-20 rounded-full text-white hover:bg-neutral-800"
+          className="absolute top-4 left-4 z-20 rounded-full text-neutral-700 hover:bg-neutral-100" // ✅ Color de texto y hover ajustado para fondo blanco
           aria-label="Cerrar reproductor"
         >
           <X className="size-6" />
@@ -101,9 +96,8 @@ export function FullScreenPlayer() {
           {/* Contenedor de la Imagen de la Carátula */}
           {/* Ajustes para un tamaño responsivo que se vea bien en móvil, centrado y con sombra */}
           <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-lg
-                          max-w-full sm:max-w-sm md:max-w-md lg:max-w-lg" /* ✅ max-w-full y breakpoints para imagen */
-                          style={{ maxWidth: 'min(80vw, 400px)' }} /* ✅ Ajuste CSS inline para un control fino en móvil */
-          >
+                          max-w-[min(calc(100vw-3rem),_calc(100vh-250px))] /* ✅ Ajuste: min entre 80vw y la altura disponible */
+                          sm:max-w-sm md:max-w-md lg:max-w-lg">
             <Image
               src={playerCoverSource}
               alt={`Carátula de ${current?.album || "Desconocido"}`}
@@ -120,7 +114,7 @@ export function FullScreenPlayer() {
           {/* Título y Artista */}
           <div className="text-center w-full px-2"> 
             <h2 className="text-2xl font-bold truncate">{current?.title || "Nada reproduciéndose"}</h2>
-            <p className="text-lg text-neutral-400 truncate">{current?.artist || "Selecciona una pista"}</p>
+            <p className="text-lg text-neutral-600 truncate">{current?.artist || "Selecciona una pista"}</p> {/* ✅ Texto artista más oscuro */}
           </div>
         </div>
 
@@ -128,15 +122,15 @@ export function FullScreenPlayer() {
         {/* flex-none para que no se estire, con padding responsivo */}
         <div className="w-full flex-none flex flex-col gap-4 px-4 pb-8 md:px-6 md:pb-10">
           {/* Seek Bar */}
-          <div className="w-full flex items-center gap-3 text-neutral-400"> 
+          <div className="w-full flex items-center gap-3 text-neutral-600"> {/* ✅ Texto de tiempo más oscuro */}
             <span className="text-sm tabular-nums">{formatTime(progress)}</span>
             <Slider
               value={[Math.min(progress, duration || 0)]}
               max={Math.max(duration, 1)}
               step={1}
               onValueChange={(v) => seek(v[0] || 0)}
-              // ✅ Clases para el slider: track blanco, thumb blanco y eliminar el outline/ring en focus
-              className="flex-1 [&_span]:bg-white [&_div]:bg-white [&>span:first-child]:focus-visible:outline-none [&>span:first-child]:focus-visible:ring-0 [&>span:first-child]:ring-offset-0" 
+              // ✅ Colores de slider ajustados para fondo blanco: track negro, thumb negro
+              className="flex-1 [&_span]:bg-black [&_div]:bg-black [&>span:first-child]:focus-visible:outline-none [&>span:first-child]:focus-visible:ring-0 [&>span:first-child]:ring-offset-0" 
             />
             <span className="text-sm tabular-nums">{formatTime(duration)}</span>
           </div>
@@ -147,7 +141,7 @@ export function FullScreenPlayer() {
             <Button
               variant="ghost"
               size="icon"
-              className={cn("rounded-full hover:bg-neutral-800 text-neutral-400", shuffleMode && "text-white")}
+              className={cn("rounded-full hover:bg-neutral-100 text-neutral-600", shuffleMode && "text-black")} // ✅ Colores ajustados
               onClick={toggleShuffle}
               aria-label="Modo aleatorio"
             >
@@ -155,7 +149,7 @@ export function FullScreenPlayer() {
             </Button>
 
             {/* Botón Prev */}
-            <Button variant="ghost" size="icon" className="rounded-full hover:bg-neutral-800 text-neutral-400" onClick={prev} aria-label="Anterior">
+            <Button variant="ghost" size="icon" className="rounded-full hover:bg-neutral-100 text-neutral-600" onClick={prev} aria-label="Anterior"> {/* ✅ Colores ajustados */}
               <SkipBack className="size-6" />
             </Button>
 
@@ -163,7 +157,7 @@ export function FullScreenPlayer() {
             <Button
               variant="ghost"
               size="lg" 
-              className="rounded-full hover:bg-neutral-800 border border-neutral-700 flex-shrink-0 text-white" 
+              className="rounded-full hover:bg-neutral-100 border border-neutral-300 flex-shrink-0 text-black" // ✅ Borde y texto ajustados
               onClick={toggle}
               aria-label={isPlaying ? "Pausar" : "Reproducir"}
             >
@@ -171,7 +165,7 @@ export function FullScreenPlayer() {
             </Button>
 
             {/* Botón Next */}
-            <Button variant="ghost" size="icon" className="rounded-full hover:bg-neutral-800 text-neutral-400" onClick={next} aria-label="Siguiente">
+            <Button variant="ghost" size="icon" className="rounded-full hover:bg-neutral-100 text-neutral-600" onClick={next} aria-label="Siguiente"> {/* ✅ Colores ajustados */}
               <SkipForward className="size-6" />
             </Button>
 
@@ -179,7 +173,7 @@ export function FullScreenPlayer() {
             <Button
               variant="ghost"
               size="icon"
-              className={cn("rounded-full hover:bg-neutral-800 text-neutral-400", loopMode !== 'none' && "text-white")}
+              className={cn("rounded-full hover:bg-neutral-100 text-neutral-600", loopMode !== 'none' && "text-black")} // ✅ Colores ajustados
               onClick={toggleLoop}
               aria-label={`Modo de repetición: ${loopMode === 'none' ? 'Ninguno' : loopMode === 'all' ? 'Toda la lista' : 'Una canción'}`}
             >
@@ -201,8 +195,8 @@ export function FullScreenPlayer() {
                 aria-label={liked.has(String(current.id)) ? "Quitar de me gusta" : "Agregar a me gusta"}
                 onClick={() => toggleLike(String(current.id))}
                 className={cn(
-                  "hover:bg-neutral-800 rounded-full text-neutral-400",
-                  liked.has(String(current.id)) && "text-white fill-white" 
+                  "hover:bg-neutral-100 rounded-full text-neutral-600", // ✅ Colores ajustados
+                  liked.has(String(current.id)) && "text-black fill-black" // ✅ Colores ajustados para corazón lleno
                 )}
               >
                 <Heart className={cn("size-6", liked.has(String(current.id)) && "fill-current")} />
@@ -210,16 +204,16 @@ export function FullScreenPlayer() {
             )}
 
             {/* Slider de Volumen */}
-            <Volume2 className="size-5 text-neutral-400 flex-shrink-0" />
+            <Volume2 className="size-5 text-neutral-600 flex-shrink-0" /> {/* ✅ Color de icono ajustado */}
             <Slider
               value={[vol]}
               max={100}
               step={1}
               onValueChange={(v) => setVolume((v[0] || 0) / 100)}
-              // ✅ Clases para el slider: track blanco, thumb blanco y eliminar el outline/ring en focus
-              className="flex-1 max-w-[200px] [&_span]:bg-white [&_div]:bg-white [&>span:first-child]:focus-visible:outline-none [&>span:first-child]:focus-visible:ring-0 [&>span:first-child]:ring-offset-0" 
+              // ✅ Colores de slider ajustados para fondo blanco: track negro, thumb negro
+              className="flex-1 max-w-[200px] [&_span]:bg-black [&_div]:bg-black [&>span:first-child]:focus-visible:outline-none [&>span:first-child]:focus-visible:ring-0 [&>span:first-child]:ring-offset-0" 
             />
-            <span className="text-sm text-neutral-400 tabular-nums w-8 text-right">{vol}</span>
+            <span className="text-sm text-neutral-600 tabular-nums w-8 text-right">{vol}</span> {/* ✅ Texto de volumen más oscuro */}
           </div>
         </div>
       </DialogContent>

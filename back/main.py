@@ -1,7 +1,7 @@
 import os
 import shutil
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, status, Response
-from sqlalchemy import exc
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, status, Response, Query
+from sqlalchemy import exc, func
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -12,7 +12,7 @@ from pathlib import Path # Importar Path para manejo robusto de rutas de archivo
 # Importa los modelos de la base de datos
 from .database import engine, Base, get_db
 from back.models import Playlist, Track 
-from back.schemas import PlaylistCreate, PlaylistResponse, TrackBase 
+from back.schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse
 
 app = FastAPI(
     title="Minimalist Music Stream API",
@@ -48,10 +48,28 @@ async def startup():
 async def read_root():
     return {"message": "Welcome to the Music Stream API!"}
 
-@app.get("/api/tracks", response_model=List[dict])
-async def read_tracks(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Track)) 
+@app.get("/api/tracks", response_model=PagedTracksResponse) 
+async def read_tracks(
+    limit: Optional[int] = Query(None, ge=1), # ✅ Permite None para sin límite, sin max.
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db)
+):
+    # Consulta base para las canciones
+    query = select(Track)
+    
+    # Aplica offset y limit si están definidos
+    if offset is not None:
+        query = query.offset(offset)
+    if limit is not None: # ✅ Aplica el límite solo si no es None
+        query = query.limit(limit)
+
+    result = await db.execute(query)
     tracks = result.scalars().all()
+
+    # Consulta el total de canciones (sin limit ni offset)
+    total_result = await db.execute(select(func.count(Track.id)))
+    total = total_result.scalar_one()
+
     track_list = []
     for t in tracks:
         track_list.append({
@@ -60,10 +78,14 @@ async def read_tracks(db: AsyncSession = Depends(get_db)):
             "artist": t.artist,
             "album": t.album,
             "duration": t.duration,
-            "artwork_url": t.artwork_url, 
-            "audio_url": t.audio_url 
+            "artwork_url": t.artwork_url,
+            "audio_url": t.audio_url,
         })
-    return track_list
+
+    return {
+        "total": total,
+        "items": track_list,
+    }
 
 @app.get("/api/playlists", response_model=List[PlaylistResponse])
 async def get_all_playlists(db: AsyncSession = Depends(get_db)):

@@ -1,41 +1,46 @@
-import "@/app/globals.css"
-import { Inter } from 'next/font/google'
-import { cn } from "@/lib/utils"
-import { ThemeProvider } from "@/components/theme-provider"
-import Link from "next/link"
-import { Music2 } from 'lucide-react'
-import { NavSidebar } from "@/components/nav-sidebar"
-import { NavBottom } from "@/components/nav-bottom"
-import { PlayerProvider } from "@/components/player/player-provider"
-import { PlayerBar } from "@/components/player/player-bar"
-import { FullScreenPlayer } from "@/components/player/full-screen-player"; // Asegúrate de que estén importados
-import { DesktopPlayerControls } from "@/components/player/desktop-player-controls"; // Asegúrate de que estén importados
-import type { Metadata } from "next/types"; // Importa el tipo Metadata
+import type { Metadata } from "next/types";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { cn } from "@/lib/utils";
+import { ThemeProvider } from "@/components/theme-provider"; 
+import Link from "next/link"; 
+import { Music2 } from 'lucide-react'; 
+import { NavSidebar } from "@/components/nav-sidebar"; 
+import { NavBottom } from "@/components/nav-bottom"; 
+import { PlayerProvider } from "@/components/player/player-provider";
+import { PlayerBar } from "@/components/player/player-bar";
+import { FullScreenPlayer } from "@/components/player/full-screen-player";
+import { DesktopPlayerControls } from "@/components/player/desktop-player-controls"; 
+import { Toaster } from "sonner"; 
 
-const inter = Inter({ subsets: ["latin"] })
+const inter = Inter({ subsets: ["latin"] });
 
-export const metadata: Metadata = { // Asegúrate de que Metadata esté tipado
-  title: "Minimal Music",
-  description: "A lovable minimalist music streaming experience",
-  // ✅ CRÍTICO: Configuración del viewport para evitar zoom inesperado en móviles
+export const metadata: Metadata = {
+  title: "Minimal Music", 
+  description: "A lovable minimalist music streaming experience", 
   viewport: {
-    width: 'device-width',      // El ancho del viewport es el ancho del dispositivo
-    initialScale: 1,            // La escala inicial es 1 (sin zoom)
-    maximumScale: 1,            // Evita que el usuario pueda hacer zoom más allá de 1
-    userScalable: false,        // Deshabilita el zoom manual por parte del usuario
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
   },
-}
+};
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="es" suppressHydrationWarning>
-      <body className={cn(inter.className, "bg-white text-black antialiased")}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+    <html lang="es" suppressHydrationWarning> 
+      {/* Body como flex-col para que el contenido principal ocupe el espacio y el footer sea fijo */}
+      <body className={cn(inter.className, "bg-white text-black antialiased flex flex-col min-h-screen")}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}> 
           <PlayerProvider>
-            {/* Main Grid Container */}
-            <div className="min-h-screen grid md:grid-rows-[1fr_auto] md:grid-cols-[280px_1fr]">
+            {/* Contenedor principal del sidebar y el contenido, flex-1 para crecer */}
+            <div className="flex-1 grid md:grid-cols-[280px_1fr]"> 
 
-              {/* Sidebar (desktop) - permanece igual */}
+              {/* Sidebar (desktop) */}
               <aside className="hidden md:flex md:flex-col border-r border-neutral-200">
                 <Link href="/" className="flex items-center gap-2 px-6 py-5">
                   <div className="size-8 rounded-full bg-black text-white grid place-items-center">
@@ -47,16 +52,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </aside>
 
               {/* Main content */}
-              {/* ✅ Ajustado padding-bottom para móviles para dar espacio a las barras fijas */}
-              <main className="relative pb-44 md:pt-0 md:pb-0">
+              {/* ✅ AJUSTADO: padding-bottom para dejar espacio a las barras fijas */}
+              {/* pb-[calc(AlturaPlayerBarMovil + AlturaNavBottom + safe-area)] para móvil */}
+              {/* md:pb-[calc(AlturaDesktopPlayerControls + safe-area)] para desktop */}
+              {/* Asumiendo PlayerBar/DesktopPlayerControls ~3rem, NavBottom ~4rem */}
+              <main className="relative flex-1 overflow-y-auto pb-[calc(3rem+4rem+env(safe-area-inset-bottom))] md:pb-[calc(3rem+env(safe-area-inset-bottom))]"> 
                 <div className="mx-auto max-w-6xl px-4 md:px-8 py-6 md:py-10">
                   {children}
                 </div>
               </main>
+            </div>
 
-              {/* Contenedor Fijo para Barras Inferiores (Móvil) / Contenedor de PlayerBar (Desktop) */}
-              {/* ✅ Agregado padding-bottom para respetar el área segura del móvil */}
-              <div className="fixed inset-x-0 bottom-0 z-50 flex flex-col md:relative md:col-span-2 pb-[env(safe-area-inset-bottom)]">
+            {/* ✅ CAMBIO CLAVE: Contenedor siempre fijo en la parte inferior */}
+            {/* Elimina `md:relative md:col-span-2` para que siempre sea `fixed` */}
+            <div className="fixed inset-x-0 bottom-0 z-50 flex flex-col pb-[env(safe-area-inset-bottom)]">
                 
                 {/* Mini-Reproductor (visible solo en móvil) */}
                 <div className="md:hidden border-t border-neutral-200 bg-white">
@@ -77,13 +86,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <NavBottom />
                 </div>
 
-              </div>
-
             </div>
             <FullScreenPlayer /> 
           </PlayerProvider>
+          <Toaster theme="light" position="top-right" /> 
         </ThemeProvider>
       </body>
     </html>
-  )
+  );
 }

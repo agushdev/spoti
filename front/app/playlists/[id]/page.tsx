@@ -1,184 +1,283 @@
 "use client";
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { TrackCard } from "@/components/track-card";
+import { TrackRow } from "@/components/track-row"; 
 import Link from "next/link";
-import { ChevronLeft, Plus, Edit, Trash2 } from 'lucide-react';
+import { ChevronLeft, Plus, Edit, Trash2 } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
-import { AddTrackToPlaylistDialog } from '@/components/add-track-to-playlist-dialog';
-import { EditPlaylistNameDialog } from '@/components/edit-playlist-name-dialog';
-import { DeletePlaylistDialog } from '@/components/delete-playlist-dialog';
-import { loadPlaylists } from '@/lib/store';
-import type { BackendPlaylist, LocalPlaylist, Track } from '@/types';
-import { use } from 'react';
-import { Toaster, toast } from 'sonner';
+import { AddTrackToPlaylistDialog } from '@/components/add-track-to-playlist-dialog'; 
+import { EditPlaylistNameDialog } from '@/components/edit-playlist-name-dialog'; 
+import { DeletePlaylistDialog } from '@/components/delete-playlist-dialog'; 
 
-export default function PlaylistDetailPage({ params }: { params: Promise<{ id: string }> }) {
+// Importaciones de @dnd-kit
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  useSensor, 
+  useSensors, 
+  PointerSensor as DndPointerSensor, // Renombrado para evitar conflicto con CustomPointerSensor
+  KeyboardSensor,
+  closestCorners,
+  UniqueIdentifier
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy // ✅ Estrategia de ordenación vertical
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+// Importaciones de modificadores para restringir movimiento
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+
+type Track = {
+  id: number;
+  title: string;
+  artist: string;
+  album: string;
+  duration: string;
+  artwork_url: string | null; 
+  audio_url: string;
+};
+
+type Playlist = {
+  id: number;
+  name: string;
+  tracks: Track[]; 
+};
+
+// Custom PointerSensor para ignorar arrastres que comienzan en elementos con data-dndkit-disabled="true"
+class CustomPointerSensor extends DndPointerSensor { 
+  static activators = [
+    {
+      eventName: 'onPointerDown' as const,
+      handler: ({ nativeEvent: event }) => {
+        // Ignora el arrastre si el clic se originó en un elemento con data-dndkit-disabled="true"
+        if (event.target instanceof Element && event.target.closest('[data-dndkit-disabled="true"]')) {
+          return false;
+        }
+        return true;
+      },
+    },
+  ];
+}
+
+// Custom modifier para restringir el DragOverlay a los límites del contenedor
+// Esto ayuda a que el elemento arrastrado no se vaya "demasiado lejos"
+const restrictToContainer = (containerRef: React.RefObject<HTMLDivElement>) => {
+  return ({ transform, activeNodeRect }: { transform: any; activeNodeRect: any }) => {
+    if (!containerRef.current || !activeNodeRect) {
+      return transform;
+    }
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const deltaY = transform.y;
+    const proposedTop = activeNodeRect.top + deltaY;
+    const proposedBottom = activeNodeRect.bottom + deltaY;
+    let newDeltaY = deltaY;
+
+    if (proposedTop < containerRect.top) {
+      newDeltaY = containerRect.top - activeNodeRect.top;
+    } else if (proposedBottom > containerRect.bottom) {
+      newDeltaY = containerRect.bottom - activeNodeRect.bottom;
+    }
+
+    return { ...transform, y: newDeltaY };
+  };
+};
+
+
+// Componente Wrapper para hacer TrackRow sortable, definido localmente aquí
+function SortableTrack({
+  id,
+  track,
+  index,
+  queue,
+  onRemoveFromPlaylist,
+}: {
+  id: UniqueIdentifier;
+  track: Track;
+  index: number;
+  queue: Track[];
+  onRemoveFromPlaylist: (trackId: number) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0 : 1, // La fila original se vuelve completamente invisible al arrastrar
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <TrackRow
+        track={track}
+        index={index}
+        queue={queue}
+        onRemoveFromPlaylist={onRemoveFromPlaylist}
+        attributes={attributes} 
+        listeners={listeners} // ✅ Aquí pasamos 'listeners' directamente
+        isDragging={isDragging} 
+      />
+    </div>
+  );
+}
+
+
+export default function PlaylistDetailPage({ params }: { params: { id: string } }) { 
   const router = useRouter();
-  const { id: playlistId } = use(params);
-  const [backendPlaylist, setBackendPlaylist] = useState<BackendPlaylist | null>(null);
-  const [localPlaylist, setLocalPlaylist] = useState<LocalPlaylist | null>(null);
+  const playlistId = parseInt(params.id, 10); 
+  const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddTrackDialogOpen, setIsAddTrackDialogOpen] = useState(false);
   const [isEditNameDialogOpen, setIsEditNameDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [allTracks, setAllTracks] = useState<Track[]>([]);
+  
+  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null); // Para el DragOverlay
 
-  const isBackendPlaylist = !isNaN(parseInt(playlistId, 10));
+  const containerRef = useRef<HTMLDivElement>(null); // Referencia al contenedor de las canciones
+
+  const sensors = useSensors(
+    // ✅ Usamos CustomPointerSensor con una distancia de activación de 1px
+    useSensor(CustomPointerSensor, { activationConstraint: { distance: 1 } }), 
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const modifiers = useMemo(
+    () => [restrictToVerticalAxis, restrictToContainer(containerRef)], 
+    [containerRef] 
+  );
 
   const fetchPlaylistDetails = useCallback(async () => {
-    if (isBackendPlaylist) {
-      const id = parseInt(playlistId, 10);
-      if (isNaN(id)) {
-        console.error("Invalid Playlist ID:", playlistId);
+    if (isNaN(playlistId)) {
+        console.error("ID de Playlist inválido:", params.id);
         setIsLoading(false);
-        setBackendPlaylist(null);
+        setPlaylist(null);
         return;
-      }
-
-      try {
-        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.0.107:8000';
-        const url = `${apiBaseUrl}/api/playlists/${id}`;
-        console.log("Fetching backend playlist:", url);
-        const response = await fetch(url, {
-          headers: { 'Accept': 'application/json' },
-        });
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`HTTP Error: ${response.status} ${response.statusText}, Body: ${errorText}`);
-          setBackendPlaylist(null);
-          throw new Error(`Failed to fetch playlist: ${response.status}`);
-        }
-        const data: BackendPlaylist = await response.json();
-        console.log("Backend playlist data:", data);
-        setBackendPlaylist(data);
-      } catch (error) {
-        console.error("Fetch error:", error);
-        setBackendPlaylist(null);
-      }
-    } else {
-      const localPlaylists = loadPlaylists();
-      const found = localPlaylists.find((p) => p.id === playlistId);
-      setLocalPlaylist(found || null);
-      console.log("Local playlist data:", found);
     }
 
     try {
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.0.107:8000';
-      const response = await fetch(`${apiBaseUrl}/api/tracks`, {
-        headers: { 'Accept': 'application/json' },
-      });
+      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+      const response = await fetch(`http://${host}:8000/api/playlists/${playlistId}`);
+      console.log("Obteniendo playlist de:", `http://${host}:8000/api/playlists/${playlistId}`); 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`HTTP Error: ${response.status} ${response.statusText}, Body: ${errorText}`);
-        throw new Error('Failed to fetch tracks');
+        console.error(`Error HTTP! Estado: ${response.status}, Cuerpo: ${errorText}`);
+        setPlaylist(null); 
+      } else {
+        const data: Playlist = await response.json();
+        console.log("Datos de la playlist:", data); 
+        setPlaylist(data);
       }
-      const tracks: Track[] = await response.json();
-      setAllTracks(tracks);
     } catch (error) {
-      console.error("Error fetching tracks:", error);
+      console.error("Error al obtener detalles de la playlist:", error);
+      setPlaylist(null); 
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
-  }, [playlistId, isBackendPlaylist]);
+  }, [playlistId, params.id]); 
 
   useEffect(() => {
     fetchPlaylistDetails();
   }, [fetchPlaylistDetails]);
 
   const handleRemoveTrack = useCallback(async (trackToRemoveId: number) => {
-    if (isBackendPlaylist && backendPlaylist && backendPlaylist.id) {
-      try {
-        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.0.107:8000';
-        const url = `${apiBaseUrl}/api/playlists/${backendPlaylist.id}/tracks/${trackToRemoveId}`;
-        console.log("Attempting to delete track from playlist:", url);
-        const response = await fetch(url, {
-          method: 'DELETE',
-          headers: { 'Accept': 'application/json' },
-        });
+    if (!playlist) return;
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Error removing track: Status: ${response.status}, StatusText: ${response.statusText}, Body: ${errorText}`);
-          toast.error(`Error al eliminar la canción: ${errorText || response.statusText}`);
-          return;
-        }
-        toast.success("Canción eliminada de la playlist.", {
-          description: "La pista ha sido removida exitosamente.",
-          duration: 3000,
-        });
-        fetchPlaylistDetails();
-      } catch (error: any) {
-        console.error("Failed to remove track:", error.message, error.stack);
-        toast.error(`Error al eliminar la canción: ${error.message}`);
-      }
-    } else if (localPlaylist) {
-      const updatedTrackIds = localPlaylist.trackIds.filter((id) => id !== String(trackToRemoveId));
-      const updatedPlaylists = loadPlaylists().map((p) =>
-        p.id === localPlaylist.id ? { ...p, trackIds: updatedTrackIds } : p
-      );
-      localStorage.setItem('mm_playlists', JSON.stringify(updatedPlaylists));
-      setLocalPlaylist({ ...localPlaylist, trackIds: updatedTrackIds });
-      toast.success("Canción eliminada de la playlist local.", {
-        description: "La pista ha sido removida exitosamente.",
-        duration: 3000,
+    try {
+      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+      const response = await fetch(`http://${host}:8000/api/playlists/${playlist.id}/tracks/${trackToRemoveId}`, {
+        method: 'DELETE',
       });
-    } else {
-      console.error("Cannot remove track: No valid playlist found");
-      toast.error("Error: No se encontró una playlist válida.");
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Error al eliminar pista: Estado: ${response.status}, Cuerpo: ${errorText}`);
+        alert("Hubo un error al eliminar la canción de la playlist."); 
+      } else {
+        alert("Canción eliminada de la playlist."); 
+        fetchPlaylistDetails(); 
+      }
+    } catch (error) {
+      console.error("Error al eliminar pista:", error);
+      alert("Hubo un error al eliminar la canción."); 
     }
-  }, [backendPlaylist, localPlaylist, isBackendPlaylist, fetchPlaylistDetails]);
+  }, [playlist, fetchPlaylistDetails]);
 
   const handleDeletePlaylist = useCallback(async () => {
-    if (isBackendPlaylist && backendPlaylist && backendPlaylist.id) {
-      try {
-        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.0.107:8000';
-        const url = `${apiBaseUrl}/api/playlists/${backendPlaylist.id}`;
-        console.log("Deleting playlist:", url);
-        const response = await fetch(url, {
-          method: 'DELETE',
-          headers: { 'Accept': 'application/json' },
-        });
+    if (!playlist) return;
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Error deleting playlist: Status: ${response.status}, StatusText: ${response.statusText}, Body: ${errorText}`);
-          toast.error(`Error al eliminar la playlist: ${errorText || response.statusText}`);
-        } else {
-          toast.success("Playlist eliminada exitosamente.", {
-            description: "La playlist ha sido removida.",
-            duration: 3000,
-          });
-          router.push('/library');
-        }
-      } catch (error: any) {
-        console.error("Failed to delete playlist:", error.message, error.stack);
-        toast.error(`Error al eliminar la playlist: ${error.message}`);
-      }
-    } else if (localPlaylist) {
-      const updatedPlaylists = loadPlaylists().filter((p) => p.id !== localPlaylist.id);
-      localStorage.setItem('mm_playlists', JSON.stringify(updatedPlaylists));
-      toast.success("Playlist local eliminada exitosamente.", {
-        description: "La playlist ha sido removida.",
-        duration: 3000,
+    try {
+      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+      const response = await fetch(`http://${host}:8000/api/playlists/${playlist.id}`, {
+        method: 'DELETE',
       });
-      router.push('/library');
-    } else {
-      console.error("Cannot delete playlist: No valid playlist found");
-      toast.error("Error: No se encontró una playlist válida.");
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Error al eliminar playlist: Estado: ${response.status}, Cuerpo: ${errorText}`);
+        alert("Hubo un error al eliminar la playlist."); 
+      } else {
+        alert("Playlist eliminada exitosamente."); 
+        router.push('/biblioteca'); 
+      }
+    } catch (error) {
+      console.error("Error al eliminar playlist:", error);
+      alert("Hubo un error al eliminar la playlist."); 
     }
-  }, [backendPlaylist, localPlaylist, isBackendPlaylist, router]);
+  }, [playlist, router]);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id);
+  };
+  
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null); 
+
+    if (over && active.id !== over.id && playlist) {
+      const oldIndex = playlist.tracks.findIndex(track => String(track.id) === String(active.id));
+      const newIndex = playlist.tracks.findIndex(track => String(track.id) === String(over.id));
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newTracks = arrayMove(playlist.tracks, oldIndex, newIndex);
+        setPlaylist({ ...playlist, tracks: newTracks });
+
+        // TODO: Llama a tu backend para PERSISTIR el nuevo orden aquí
+        console.log("Nueva orden de tracks:", newTracks.map(t => t.id));
+      }
+    }
+  };
+
+  const trackIds = useMemo(() => playlist?.tracks.map(t => String(t.id)) || [], [playlist]);
+
+  // Obtener la canción activa para el DragOverlay
+  const activeTrack = useMemo(() => {
+    if (!activeId || !playlist) return null;
+    return playlist.tracks.find(t => String(t.id) === String(activeId));
+  }, [activeId, playlist]);
+
 
   if (isLoading) {
-    return <div className="p-10 text-center text-neutral-500">Cargando playlist...</div>;
+    return (
+      <div className="flex justify-center items-center h-full min-h-[calc(100vh-200px)]">
+        <p className="text-neutral-500">Cargando playlist...</p>
+      </div>
+    );
   }
 
-  if (!backendPlaylist && !localPlaylist) {
+  if (!playlist) {
     return (
       <div className="p-10 text-center text-neutral-500 space-y-4">
         <p>Playlist no encontrada.</p>
-        <Link href="/library" passHref>
+        <Link href="/biblioteca" passHref>
           <Button variant="outline" className="flex items-center gap-2">
             <ChevronLeft className="size-4" /> Volver a Biblioteca
           </Button>
@@ -187,15 +286,11 @@ export default function PlaylistDetailPage({ params }: { params: Promise<{ id: s
     );
   }
 
-  const playlist = backendPlaylist || localPlaylist;
-  const playlistName = backendPlaylist ? backendPlaylist.name : localPlaylist!.title;
-  const tracks = backendPlaylist
-    ? backendPlaylist.tracks
-    : allTracks.filter((track) => localPlaylist!.trackIds.includes(String(track.id)));
+  const tracksToRender = playlist.tracks;
 
   return (
     <div className="space-y-6">
-      <Link href="/library" passHref>
+      <Link href="/biblioteca" passHref>
         <Button variant="ghost" className="flex items-center gap-2">
           <ChevronLeft className="size-4" /> Volver a Biblioteca
         </Button>
@@ -203,10 +298,10 @@ export default function PlaylistDetailPage({ params }: { params: Promise<{ id: s
 
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold">{playlistName}</h1>
-          <p className="text-neutral-600">{tracks.length} canciones</p>
+          <h1 className="text-3xl font-bold">{playlist.name}</h1>
+          <p className="text-neutral-600">{tracksToRender.length} canciones</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-center gap-2 md:flex-nowrap md:justify-end">
           <Button onClick={() => setIsAddTrackDialogOpen(true)} className="flex items-center gap-2">
             <Plus className="size-4" /> Añadir canciones
           </Button>
@@ -219,46 +314,82 @@ export default function PlaylistDetailPage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        {tracks.length === 0 ? (
-          <p className="text-neutral-500 col-span-full">Aún no hay canciones en esta playlist.</p>
-        ) : (
-          tracks.map((track) => (
-            <TrackCard
-              key={track.id}
-              track={track}
-              queue={tracks}
-              onRemoveFromPlaylist={handleRemoveTrack}
-            />
-          ))
-        )}
+      <div className="mt-8">
+        {/* Cabecera visible solo en sm+ para ahorrar espacio en móvil */}
+        <div className="hidden sm:grid grid-cols-[auto_1fr_120px_60px_auto] gap-2 py-2 px-3 border-b border-neutral-200 text-xs font-semibold text-neutral-500 uppercase">
+          <div className="text-center">#</div>
+          <div>Título</div>
+          <div className="hidden md:block">Álbum</div>
+          <div className="text-right">Duración</div>
+          <div className="text-right"></div>
+        </div>
+
+        {/* DndContext con modificadores para movimiento vertical y restricción de bordes */}
+        <DndContext 
+          sensors={sensors} 
+          collisionDetection={closestCorners} 
+          onDragStart={handleDragStart} 
+          onDragEnd={handleDragEnd}    
+          modifiers={modifiers} 
+        >
+          {/* SortableContext para la lista de canciones ordenables */}
+          <SortableContext items={trackIds} strategy={verticalListSortingStrategy}> 
+            <div ref={containerRef} className="space-y-1 mt-2">
+              {tracksToRender.length === 0 ? (
+                <p className="text-neutral-500 col-span-full py-4 text-center">Aún no hay canciones en esta playlist.</p>
+              ) : (
+                tracksToRender.map((track, index) => ( 
+                  <SortableTrack 
+                    key={String(track.id)} 
+                    id={String(track.id)}  
+                    track={track}
+                    index={index} 
+                    queue={tracksToRender}
+                    onRemoveFromPlaylist={handleRemoveTrack} 
+                  />
+                ))
+              )}
+            </div>
+          </SortableContext>
+          
+          {/* DragOverlay para el "clon" flotante (estilo Spotify) */}
+          <DragOverlay>
+            {activeTrack ? (
+              <TrackRow 
+                track={activeTrack} 
+                index={tracksToRender.findIndex(t => t.id === activeTrack.id)} 
+                queue={[]} 
+                isOverlay={true} // Indicar que es un overlay
+              />
+            ) : null}
+          </DragOverlay>
+
+        </DndContext>
       </div>
 
       <AddTrackToPlaylistDialog
         open={isAddTrackDialogOpen}
         onOpenChange={setIsAddTrackDialogOpen}
         playlistId={playlistId}
-        currentTracks={tracks}
-        onPlaylistUpdated={fetchPlaylistDetails}
+        currentTracks={tracksToRender}
+        onPlaylistUpdated={fetchPlaylistDetails} 
       />
 
       <EditPlaylistNameDialog
         open={isEditNameDialogOpen}
         onOpenChange={setIsEditNameDialogOpen}
         playlistId={playlistId}
-        currentName={playlistName}
-        onPlaylistUpdated={fetchPlaylistDetails}
+        currentName={playlist.name}
+        onPlaylistUpdated={fetchPlaylistDetails} 
       />
 
       <DeletePlaylistDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         playlistId={playlistId}
-        playlistName={playlistName}
-        onPlaylistDeleted={handleDeletePlaylist}
+        playlistName={playlist.name}
+        onPlaylistDeleted={handleDeletePlaylist} 
       />
-
-      <Toaster theme="light" position="top-right" />
     </div>
   );
 }

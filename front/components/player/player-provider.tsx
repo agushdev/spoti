@@ -1,4 +1,3 @@
-// src/components/player/player-provider.tsx
 "use client"
 
 import React, {
@@ -22,6 +21,12 @@ type Track = {
   audio_url: string
 }
 
+// Definir el tipo para la respuesta paginada del backend
+type PagedTracksResponse = {
+  total: number;
+  items: Track[];
+};
+
 type LoopMode = 'none' | 'all' | 'one'; 
 
 type PlayerContextValue = {
@@ -43,7 +48,6 @@ type PlayerContextValue = {
   loopMode: LoopMode;    
   toggleShuffle: () => void; 
   toggleLoop: () => void;    
-  // ✅ Nuevo estado y función para la expansión del reproductor
   isPlayerExpanded: boolean;
   togglePlayerExpansion: () => void;
 }
@@ -55,16 +59,33 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [queue, setQueue] = useState<Track[]>([])
   const [current, setCurrent] = useState<Track | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [volume, setVolumeState] = useState(0.8)
+  // ✅ MODIFICACIÓN: Cargar volumen desde localStorage o usar 0.8 por defecto
+  const [volume, setVolumeState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedVolume = localStorage.getItem('lastVolume');
+      return savedVolume ? parseFloat(savedVolume) : 0.8;
+    }
+    return 0.8;
+  });
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
   const [liked, setLiked] = useState<Set<string>>(loadLikes())
   const [shuffleMode, setShuffleMode] = useState(false); 
   const [loopMode, setLoopMode] = useState<LoopMode>('all'); 
-  // ✅ Nuevo estado para la expansión del reproductor
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
 
-  // Para asegurar que los callbacks usan los estados más recientes
+  // Referencia para el ID de la pista cargada previamente
+  const loadedTrackIdRef = useRef<number | null>(null);
+
+  // Estados para el historial de reproducción
+  const [playedHistory, setPlayedHistory] = useState<Track[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Estado para el tiempo de búsqueda inicial al cargar la página
+  const [initialSeekTime, setInitialSeekTime] = useState<number | null>(null);
+
+
+  // Estados y refs para los callbacks (se mantienen igual, solo se mueve la declaración)
   const queueRef = useRef(queue);
   useEffect(() => { queueRef.current = queue; }, [queue]);
 
@@ -77,12 +98,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const loopModeRef = useRef(loopMode);
   useEffect(() => { loopModeRef.current = loopMode; }, [loopMode]);
 
+  const historyIndexRef = useRef(historyIndex);
+  useEffect(() => { historyIndexRef.current = historyIndex; }, [historyIndex]);
+
+  const playedHistoryRef = useRef(playedHistory);
+  useEffect(() => { playedHistoryRef.current = playedHistory; }, [playedHistory]);
+
 
   const handleNext = useCallback(() => {
     const currentQueue = queueRef.current;
     const currentTrack = currentRef.current;
     const currentShuffleMode = shuffleModeRef.current;
     const currentLoopMode = loopModeRef.current;
+    const currentPlayedHistory = playedHistoryRef.current;
+    const currentHistoryIndex = historyIndexRef.current;
 
     if (!currentTrack || currentQueue.length === 0) return;
 
@@ -94,86 +123,131 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    let nextIdx;
-    if (currentShuffleMode) {
-      let potentialNextIdx;
-      do {
-        potentialNextIdx = Math.floor(Math.random() * currentQueue.length);
-      } while (currentQueue.length > 1 && currentQueue[potentialNextIdx].id === currentTrack.id); 
-      nextIdx = potentialNextIdx;
-    } else {
-      const idx = currentQueue.findIndex((t) => t.id === currentTrack.id);
-      nextIdx = (idx + 1) % currentQueue.length;
-    }
+    let nextTrack: Track | null = null;
 
-    if (currentLoopMode === 'none' && nextIdx === 0 && !currentShuffleMode) {
-        setIsPlaying(false); 
-        setCurrent(currentQueue[0]); 
+    if (currentHistoryIndex < currentPlayedHistory.length - 1) {
+        nextTrack = currentPlayedHistory[currentHistoryIndex + 1];
+        setHistoryIndex(prev => prev + 1);
     } else {
-        setCurrent(currentQueue[nextIdx]);
-        setIsPlaying(true);
+        let nextIdx;
+        let potentialNextIdx; 
+        if (currentShuffleMode) {
+            do {
+                potentialNextIdx = Math.floor(Math.random() * currentQueue.length);
+            } while (currentQueue.length > 1 && currentQueue[potentialNextIdx].id === currentTrack.id); 
+            nextIdx = potentialNextIdx;
+        } else {
+            const idx = currentQueue.findIndex((t) => t.id === currentTrack.id);
+            nextIdx = (idx + 1) % currentQueue.length;
+        }
+
+        nextTrack = currentQueue[nextIdx];
+
+        if (currentLoopMode === 'none' && nextIdx === 0 && !currentShuffleMode) {
+            setIsPlaying(false); 
+            setCurrent(currentQueue[0]); 
+            return; 
+        }
+
+        setPlayedHistory(prev => [...prev.slice(0, currentHistoryIndex + 1), nextTrack!]);
+        setHistoryIndex(prev => prev + 1);
     }
+    
+    setCurrent(nextTrack);
+    setIsPlaying(true);
+
   }, []);
+
+  const handleNextRef = useRef(handleNext);
+  useEffect(() => {
+    handleNextRef.current = handleNext;
+  }, [handleNext]);
+
 
   const handlePrev = useCallback(() => {
-    const currentQueue = queueRef.current;
     const currentTrack = currentRef.current;
-    const currentShuffleMode = shuffleModeRef.current;
+    const currentPlayedHistory = playedHistoryRef.current;
+    const currentHistoryIndex = historyIndexRef.current;
 
-    if (!currentTrack || currentQueue.length === 0) return;
+    if (!currentTrack || currentPlayedHistory.length === 0) return;
 
-    let prevIdx;
-    if (currentShuffleMode) {
-      let potentialPrevIdx;
-      do {
-        potentialPrevIdx = Math.floor(Math.random() * currentQueue.length);
-      } while (currentQueue.length > 1 && currentQueue[potentialPrevIdx].id === currentTrack.id);
-      prevIdx = potentialPrevIdx;
-    } else {
-      const idx = currentQueue.findIndex((t) => t.id === currentTrack.id);
-      prevIdx = (idx - 1 + currentQueue.length) % currentQueue.length;
+    if (audioRef.current && audioRef.current.currentTime > 3 || currentHistoryIndex === 0) {
+      audioRef.current.currentTime = 0;
+      if (!isPlaying) { 
+        setIsPlaying(true);
+      }
+      return;
     }
-    setCurrent(currentQueue[prevIdx]);
-    setIsPlaying(true);
-  }, []);
+
+    if (currentHistoryIndex > 0) {
+      const prevTrack = currentPlayedHistory[currentHistoryIndex - 1];
+      setHistoryIndex(prev => prev - 1);
+      setCurrent(prevTrack);
+      setIsPlaying(true);
+    }
+  }, [isPlaying]);
 
 
-  // Cargar lista de canciones desde tu API de FastAPI
   useEffect(() => {
     async function fetchTracks() {
       try {
-        const host = typeof window !== 'undefined' ? window.location.hostname : '192.168.0.107';
-        const res = await fetch(`http://${host}:8000/api/tracks`);
-
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+        const res = await fetch(`http://${host}:8000/api/tracks`); 
+        
         if (!res.ok) {
           throw new Error('Error cargando canciones desde la API.');
         }
-        const data: Track[] = await res.json();
-        setQueue(data);
-        if (data.length > 0 && !current) {
-          setCurrent(data[0]);
+        const pagedData: PagedTracksResponse = await res.json();
+        setQueue(pagedData.items); 
+        
+        // Cargar última canción y progreso desde localStorage
+        const savedTrackId = localStorage.getItem('lastPlayedTrackId');
+        const savedProgress = localStorage.getItem('lastPlayedProgress');
+
+        let initialTrack: Track | null = null;
+        let initialTime: number | null = null;
+
+        if (savedTrackId && savedProgress) {
+            const parsedSavedTrackId = parseInt(savedTrackId, 10);
+            const parsedSavedProgress = parseFloat(savedProgress);
+            const foundTrack = pagedData.items.find(track => track.id === parsedSavedTrackId);
+
+            if (foundTrack) {
+                initialTrack = foundTrack;
+                initialTime = parsedSavedProgress;
+            }
+        }
+
+        if (initialTrack) {
+            setCurrent(initialTrack);
+            setPlayedHistory([initialTrack]);
+            setHistoryIndex(0);
+            setInitialSeekTime(initialTime); // Guardar el tiempo para aplicarlo después
+        } else if (pagedData.items.length > 0 && !currentRef.current) {
+            const firstTrack = pagedData.items[0];
+            setCurrent(firstTrack);
+            setPlayedHistory([firstTrack]);
+            setHistoryIndex(0);
         }
       } catch (err) {
         console.error("Error cargando canciones:", err);
       }
     }
     fetchTracks();
-  }, [current]);
+  }, []); 
 
 
-  // Inicializar audio
   useEffect(() => {
     const audio = new Audio()
     audio.crossOrigin = "anonymous"
     audioRef.current = audio
-    audio.volume = volume
+    // ✅ MODIFICACIÓN: Asignar el volumen inicial cargado o el por defecto
+    audio.volume = volume 
 
     const onTime = () => setProgress(audio.currentTime)
     const onLoaded = () => setDuration(audio.duration || 0)
     
-    const onEnded = () => {
-      handleNext(); 
-    };
+    const onEnded = () => handleNextRef.current(); 
 
     audio.addEventListener("timeupdate", onTime)
     audio.addEventListener("loadedmetadata", onLoaded)
@@ -185,46 +259,85 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audio.removeEventListener("loadedmetadata", onLoaded)
       audio.removeEventListener("ended", onEnded)
     }
-  }, [handleNext]) 
+  }, []) 
 
 
-  // Cargar nueva canción cuando cambia `current` - Usar ruta relativa para audio
+  // Cargar nueva canción cuando cambia `current`
+  // Solo reinicia el progreso si la canción es diferente a la última cargada
+  // Y aplica initialSeekTime si está disponible
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio || !current) return
+    const audio = audioRef.current;
+    if (!audio || !current) return;
 
-    if (current.audio_url.startsWith('/') || current.audio_url.startsWith('http://') || current.audio_url.startsWith('https://')) {
-        audio.src = current.audio_url; 
-    } else {
-        audio.src = `/audio/${current.audio_url}`;
+    // Comprobar si la canción actual es diferente a la última que se cargó
+    const isNewTrack = loadedTrackIdRef.current !== current.id;
+
+    if (isNewTrack) {
+        if (current.audio_url.startsWith('/') || current.audio_url.startsWith('http://') || current.audio_url.startsWith('https://')) {
+            audio.src = current.audio_url; 
+        } else {
+            audio.src = `/audio/${current.audio_url}`;
+        }
+        audio.load(); // Cargar el audio para que `duration` esté disponible
+
+        // Aplicar el tiempo de búsqueda inicial si existe para una nueva pista
+        if (initialSeekTime !== null) {
+            audio.currentTime = initialSeekTime;
+            setProgress(initialSeekTime); // También actualiza el progreso en el estado
+            setInitialSeekTime(null); // Consumir el initialSeekTime
+        } else {
+            setProgress(0); // Reiniciar progreso solo para nueva canción si no hay initialSeekTime
+            setDuration(0); // Reiniciar duración solo para nueva canción
+        }
+        loadedTrackIdRef.current = current.id; // Actualizar el ID de la pista cargada
     }
     
-    setProgress(0) 
-    setDuration(0) 
-
+    // Reproducir/pausar según el estado isPlaying, sin reiniciar si es la misma canción
     if (isPlaying) { 
       audio.play().catch((e) => {
         console.error("Error al reproducir audio:", e);
         setIsPlaying(false);
       });
-    }
-  }, [current]); 
-
-  // Sincronizar play/pause 
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    if (isPlaying) {
-      audio.play().catch((e) => {
-        console.error("Error al reproducir o reanudar audio:", e);
-        setIsPlaying(false);
-      });
     } else {
-      audio.pause()
+      audio.pause();
     }
-  }, [isPlaying])
+  }, [current, isPlaying, initialSeekTime]);
+
+
+  // Guardar en localStorage cuando se pausa o se descarga la página
+  useEffect(() => {
+    const savePlayerState = () => {
+      if (current) {
+        localStorage.setItem('lastPlayedTrackId', String(current.id));
+        localStorage.setItem('lastPlayedProgress', String(audioRef.current?.currentTime || 0));
+      }
+    };
+
+    // Guarda el estado cuando se pausa
+    if (!isPlaying && current) {
+      savePlayerState();
+    }
+
+    // Guarda el estado cuando se cierra la página o se navega fuera
+    window.addEventListener('beforeunload', savePlayerState);
+
+    return () => {
+      window.removeEventListener('beforeunload', savePlayerState);
+    };
+  }, [current, isPlaying, progress]); // Dependencias para re-ejecutar el effect
+
+  // ✅ NUEVO: Guardar volumen en localStorage cada vez que cambia
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lastVolume', String(volume));
+    }
+  }, [volume]); // Depende del estado 'volume'
+
 
   const handlePlay = useCallback((track: Track, q?: Track[]) => {
+    setPlayedHistory([track]);
+    setHistoryIndex(0);
+
     if (q && q.length) setQueue(q);
     setCurrent(track);
     setIsPlaying(true);
@@ -232,8 +345,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const handleToggle = useCallback(() => {
     if (!current && queue.length > 0) {
-      setCurrent(queue[0]);
+      const firstTrack = queue[0];
+      setCurrent(firstTrack);
       setIsPlaying(true);
+      setPlayedHistory([firstTrack]);
+      setHistoryIndex(0);
       return;
     }
     setIsPlaying((prev) => !prev);
@@ -249,7 +365,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const handleVolume = useCallback((v: number) => {
     const audio = audioRef.current;
     if (audio) audio.volume = v;
-    setVolumeState(v);
+    setVolumeState(v); // ✅ Llama a setVolumeState para actualizar el estado
   }, []);
 
   const handleToggleLike = useCallback((id: string) => {
@@ -269,7 +385,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // ✅ Nueva función para expandir/colapsar el reproductor
   const togglePlayerExpansion = useCallback(() => {
     setIsPlayerExpanded((prev) => !prev);
   }, []);
@@ -295,13 +410,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       loopMode,    
       toggleShuffle, 
       toggleLoop,
-      isPlayerExpanded, // ✅ Exponer nuevo estado
-      togglePlayerExpansion, // ✅ Exponer nueva función
+      isPlayerExpanded, 
+      togglePlayerExpansion, 
     }),
     [
       current,
       isPlaying,
-      volume,
+      volume, // ✅ Incluir volumen en las dependencias para que useMemo lo actualice
       progress,
       duration,
       queue,
@@ -317,8 +432,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       loopMode,
       toggleShuffle,
       toggleLoop,
-      isPlayerExpanded, // ✅ Añadir a las dependencias
-      togglePlayerExpansion // ✅ Añadir a las dependencias
+      isPlayerExpanded, 
+      togglePlayerExpansion 
     ]
   );
 

@@ -26,3 +26,7 @@ class PlaylistResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class PagedTracksResponse(BaseModel):
+    total: int
+    items: List[TrackBase]
