@@ -1,0 +1,11 @@
+# Ignorar node_modules y build de Next.js dentro de front
+/front/node_modules/
+/front/.next/
+
+/back/__pycache__/
+/back/*.pyc
+env/
+/back/.env
+
+# Ignorar archivos de entorno globales
+.env
