@@ -41,7 +41,7 @@ export default function RootLayout({
             <div className="flex-1 grid md:grid-cols-[280px_1fr]"> 
 
               {/* Sidebar (desktop) */}
-              <aside className="hidden md:flex md:flex-col border-r border-neutral-200">
+              <aside className="hidden md:flex md:flex-col border-r border-neutral-200 sticky top-0 h-screen overflow-y-auto">
                 <Link href="/" className="flex items-center gap-2 px-6 py-5">
                   <div className="size-8 rounded-full bg-black text-white grid place-items-center">
                     <Music2 className="size-4" />

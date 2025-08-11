@@ -2,37 +2,45 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { TrackRow } from "@/components/track-row"; 
+import { TrackRow } from "@/components/track-row";
 import Link from "next/link";
-import { ChevronLeft, Plus, Edit, Trash2 } from 'lucide-react'; 
+import { ChevronLeft, Plus, Edit, Trash2, PlayCircle, Shuffle, MoreHorizontal, Search, PauseCircle, GripVertical, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { AddTrackToPlaylistDialog } from '@/components/add-track-to-playlist-dialog'; 
-import { EditPlaylistNameDialog } from '@/components/edit-playlist-name-dialog'; 
-import { DeletePlaylistDialog } from '@/components/delete-playlist-dialog'; 
-
-// Importaciones de @dnd-kit
+import { AddTrackToPlaylistDialog } from '@/components/add-track-to-playlist-dialog';
+import { EditPlaylistNameDialog } from '@/components/edit-playlist-name-dialog';
+import { DeletePlaylistDialog } from '@/components/delete-playlist-dialog';
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { usePlayer } from "@/components/player/player-provider";
+import { cn } from '@/lib/utils';
 import {
   DndContext,
   DragEndEvent,
   DragOverlay,
   DragStartEvent,
-  useSensor, 
-  useSensors, 
-  PointerSensor as DndPointerSensor, // Renombrado para evitar conflicto con CustomPointerSensor
+  useSensor,
+  useSensors,
   KeyboardSensor,
   closestCorners,
-  UniqueIdentifier
+  UniqueIdentifier,
+  DragMoveEvent,
+  PointerSensor,
+  TouchSensor,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   arrayMove,
   sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy // ✅ Estrategia de ordenación vertical
+  verticalListSortingStrategy
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-// Importaciones de modificadores para restringir movimiento
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import { SortableTrack } from '@/components/sortable-track';
+import Image from "next/image";
+import { toast } from 'sonner';
 
 type Track = {
   id: number;
@@ -40,230 +48,295 @@ type Track = {
   artist: string;
   album: string;
   duration: string;
-  artwork_url: string | null; 
+  artwork_url: string | null;
+  added_at: string;
   audio_url: string;
 };
 
 type Playlist = {
   id: number;
   name: string;
-  tracks: Track[]; 
+  tracks: Track[];
+  artwork_url?: string | null;
 };
 
-// Custom PointerSensor para ignorar arrastres que comienzan en elementos con data-dndkit-disabled="true"
-class CustomPointerSensor extends DndPointerSensor { 
-  static activators = [
-    {
-      eventName: 'onPointerDown' as const,
-      handler: ({ nativeEvent: event }) => {
-        // Ignora el arrastre si el clic se originó en un elemento con data-dndkit-disabled="true"
-        if (event.target instanceof Element && event.target.closest('[data-dndkit-disabled="true"]')) {
-          return false;
-        }
-        return true;
-      },
-    },
-  ];
+function formatDuration(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (hours > 0) {
+    return `${hours} hr ${minutes} min`;
+  }
+  return `${minutes} min`;
 }
 
-// Custom modifier para restringir el DragOverlay a los límites del contenedor
-// Esto ayuda a que el elemento arrastrado no se vaya "demasiado lejos"
-const restrictToContainer = (containerRef: React.RefObject<HTMLDivElement>) => {
-  return ({ transform, activeNodeRect }: { transform: any; activeNodeRect: any }) => {
-    if (!containerRef.current || !activeNodeRect) {
-      return transform;
-    }
-
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const deltaY = transform.y;
-    const proposedTop = activeNodeRect.top + deltaY;
-    const proposedBottom = activeNodeRect.bottom + deltaY;
-    let newDeltaY = deltaY;
-
-    if (proposedTop < containerRect.top) {
-      newDeltaY = containerRect.top - activeNodeRect.top;
-    } else if (proposedBottom > containerRect.bottom) {
-      newDeltaY = containerRect.bottom - activeNodeRect.bottom;
-    }
-
-    return { ...transform, y: newDeltaY };
-  };
-};
-
-
-// Componente Wrapper para hacer TrackRow sortable, definido localmente aquí
-function SortableTrack({
-  id,
-  track,
-  index,
-  queue,
-  onRemoveFromPlaylist,
-}: {
-  id: UniqueIdentifier;
-  track: Track;
-  index: number;
-  queue: Track[];
-  onRemoveFromPlaylist: (trackId: number) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0 : 1, // La fila original se vuelve completamente invisible al arrastrar
-  };
-
-  return (
-    <div ref={setNodeRef} style={style}>
-      <TrackRow
-        track={track}
-        index={index}
-        queue={queue}
-        onRemoveFromPlaylist={onRemoveFromPlaylist}
-        attributes={attributes} 
-        listeners={listeners} // ✅ Aquí pasamos 'listeners' directamente
-        isDragging={isDragging} 
-      />
-    </div>
-  );
+function parseDuration(durationStr: string): number {
+  const [minutes, seconds] = durationStr.split(':').map(Number);
+  return minutes * 60 + seconds;
 }
 
-
-export default function PlaylistDetailPage({ params }: { params: { id: string } }) { 
+export default function PlaylistDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const playlistId = parseInt(params.id, 10); 
+  const { play, shuffleMode, toggleShuffle, currentTrack, isPlaying, pause } = usePlayer();
+  const [playlistId, setPlaylistId] = useState<number | null>(null);
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddTrackDialogOpen, setIsAddTrackDialogOpen] = useState(false);
   const [isEditNameDialogOpen, setIsEditNameDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   
-  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null); // Para el DragOverlay
+  const [scrollDirection, setScrollDirection] = useState<'up' | 'down' | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
+  const [initialPlaylistTracks, setInitialPlaylistTracks] = useState<Track[] | null>(null);
 
-  const containerRef = useRef<HTMLDivElement>(null); // Referencia al contenedor de las canciones
+  useEffect(() => {
+    if (params.id) {
+        setPlaylistId(parseInt(params.id, 10));
+    }
+  }, [params.id]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const sensors = useSensors(
-    // ✅ Usamos CustomPointerSensor con una distancia de activación de 1px
-    useSensor(CustomPointerSensor, { activationConstraint: { distance: 1 } }), 
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 100, // Reduced for quicker response like Spotify
+        tolerance: 15, // Increased for better touch accuracy
+      },
+      onActivation: ({ event }) => {
+        if (!(event.target instanceof Element) || !event.target.closest('[data-dnd-handle]')) {
+          event.cancelable && event.preventDefault(); // Prevent dragging unless on handle
+        }
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
 
-  const modifiers = useMemo(
-    () => [restrictToVerticalAxis, restrictToContainer(containerRef)], 
-    [containerRef] 
-  );
+  const modifiers = useMemo(() => [restrictToVerticalAxis], []);
 
-  const fetchPlaylistDetails = useCallback(async () => {
-    if (isNaN(playlistId)) {
-        console.error("ID de Playlist inválido:", params.id);
-        setIsLoading(false);
-        setPlaylist(null);
-        return;
+  useEffect(() => {
+    let scrollInterval: NodeJS.Timeout | null = null;
+    const SCROLL_SPEED = 10;
+
+    if (scrollDirection && containerRef.current) {
+      scrollInterval = setInterval(() => {
+        if (containerRef.current) {
+          if (scrollDirection === 'up') {
+            containerRef.current.scrollTop -= SCROLL_SPEED;
+          } else if (scrollDirection === 'down') {
+            containerRef.current.scrollTop += SCROLL_SPEED;
+          }
+        }
+      }, 20);
     }
 
+    return () => {
+      if (scrollInterval) {
+        clearInterval(scrollInterval);
+      }
+    };
+  }, [scrollDirection]);
+
+  const fetchPlaylistDetails = useCallback(async () => {
+    if (!playlistId) return;
     try {
       const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
       const response = await fetch(`http://${host}:8000/api/playlists/${playlistId}`);
-      console.log("Obteniendo playlist de:", `http://${host}:8000/api/playlists/${playlistId}`); 
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`Error HTTP! Estado: ${response.status}, Cuerpo: ${errorText}`);
-        setPlaylist(null); 
+        setPlaylist(null);
       } else {
         const data: Playlist = await response.json();
-        console.log("Datos de la playlist:", data); 
         setPlaylist(data);
+        setInitialPlaylistTracks(data.tracks);
       }
     } catch (error) {
       console.error("Error al obtener detalles de la playlist:", error);
-      setPlaylist(null); 
+      setPlaylist(null);
     } finally {
       setIsLoading(false);
     }
-  }, [playlistId, params.id]); 
+  }, [playlistId]);
 
   useEffect(() => {
-    fetchPlaylistDetails();
-  }, [fetchPlaylistDetails]);
+    if (playlistId) {
+        fetchPlaylistDetails();
+    }
+  }, [fetchPlaylistDetails, playlistId]);
 
   const handleRemoveTrack = useCallback(async (trackToRemoveId: number) => {
     if (!playlist) return;
-
     try {
       const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
       const response = await fetch(`http://${host}:8000/api/playlists/${playlist.id}/tracks/${trackToRemoveId}`, {
         method: 'DELETE',
       });
-
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`Error al eliminar pista: Estado: ${response.status}, Cuerpo: ${errorText}`);
-        alert("Hubo un error al eliminar la canción de la playlist."); 
+        toast.error("Hubo un error al eliminar la canción de la playlist.");
       } else {
-        alert("Canción eliminada de la playlist."); 
-        fetchPlaylistDetails(); 
+        toast.success("Canción eliminada de la playlist.");
+        fetchPlaylistDetails();
       }
     } catch (error) {
       console.error("Error al eliminar pista:", error);
-      alert("Hubo un error al eliminar la canción."); 
+      toast.error("Hubo un error al eliminar la canción.");
     }
   }, [playlist, fetchPlaylistDetails]);
 
   const handleDeletePlaylist = useCallback(async () => {
     if (!playlist) return;
-
     try {
       const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
       const response = await fetch(`http://${host}:8000/api/playlists/${playlist.id}`, {
         method: 'DELETE',
       });
-
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`Error al eliminar playlist: Estado: ${response.status}, Cuerpo: ${errorText}`);
-        alert("Hubo un error al eliminar la playlist."); 
+        toast.error("Hubo un error al eliminar la playlist.");
       } else {
-        alert("Playlist eliminada exitosamente."); 
-        router.push('/biblioteca'); 
+        toast.success("Playlist eliminada exitosamente.");
+        router.push('/library');
       }
     } catch (error) {
       console.error("Error al eliminar playlist:", error);
-      alert("Hubo un error al eliminar la playlist."); 
+      toast.error("Hubo un error al eliminar la playlist.");
     }
   }, [playlist, router]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id);
+    if ('vibrate' in navigator) {
+      navigator.vibrate(50); // Haptic feedback on mobile
+    }
   };
   
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveId(null); 
+  const handleDragMove = (event: DragMoveEvent) => {
+    if (!containerRef.current || !event.active.rect.current.translated) {
+      setScrollDirection(null);
+      return;
+    }
+    
+    const { clientHeight, scrollTop } = containerRef.current;
+    const scrollThreshold = 50;
+    const pointerY = event.active.rect.current.translated.top - containerRef.current.getBoundingClientRect().top + scrollTop;
 
+    if (pointerY < scrollThreshold) {
+      setScrollDirection('up');
+    } else if (pointerY > clientHeight - scrollThreshold) {
+      setScrollDirection('down');
+    } else {
+      setScrollDirection(null);
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setScrollDirection(null);
+    const { active, over } = event;
+    setActiveId(null);
     if (over && active.id !== over.id && playlist) {
       const oldIndex = playlist.tracks.findIndex(track => String(track.id) === String(active.id));
       const newIndex = playlist.tracks.findIndex(track => String(track.id) === String(over.id));
-
       if (oldIndex !== -1 && newIndex !== -1) {
         const newTracks = arrayMove(playlist.tracks, oldIndex, newIndex);
         setPlaylist({ ...playlist, tracks: newTracks });
-
-        // TODO: Llama a tu backend para PERSISTIR el nuevo orden aquí
-        console.log("Nueva orden de tracks:", newTracks.map(t => t.id));
       }
     }
   };
 
-  const trackIds = useMemo(() => playlist?.tracks.map(t => String(t.id)) || [], [playlist]);
+  const handleReorderSave = useCallback(async () => {
+    if (!playlist) return;
+    try {
+      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+      const response = await fetch(`http://${host}:8000/api/playlists/${playlist.id}/reorder`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ trackIds: playlist.tracks.map(t => t.id) }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Error al guardar el nuevo orden: Estado: ${response.status}, Cuerpo: ${errorText}`);
+        toast.error("Hubo un error al guardar el nuevo orden de la playlist.");
+      } else {
+        toast.success("Orden de la playlist actualizado.");
+        setInitialPlaylistTracks(playlist.tracks);
+        setIsReordering(false);
+      }
+    } catch (error) {
+      console.error("Error al guardar el nuevo orden:", error);
+      toast.error("Hubo un error al guardar el nuevo orden.");
+    }
+  }, [playlist]);
 
-  // Obtener la canción activa para el DragOverlay
+  const handleReorderCancel = useCallback(() => {
+    if (initialPlaylistTracks && playlist) {
+      setPlaylist({ ...playlist, tracks: initialPlaylistTracks });
+    }
+    setIsReordering(false);
+  }, [initialPlaylistTracks, playlist]);
+
+  const trackIds = useMemo(() => playlist?.tracks.map(t => String(t.id)) || [], [playlist]);
+  
   const activeTrack = useMemo(() => {
     if (!activeId || !playlist) return null;
     return playlist.tracks.find(t => String(t.id) === String(activeId));
   }, [activeId, playlist]);
 
+  const filteredTracks = useMemo(() => {
+    if (!playlist) return [];
+    if (!searchQuery) return playlist.tracks;
+    const lowerQuery = searchQuery.toLowerCase();
+    return playlist.tracks.filter(track =>
+      track.title.toLowerCase().includes(lowerQuery) ||
+      track.artist.toLowerCase().includes(lowerQuery)
+    );
+  }, [playlist, searchQuery]);
+
+  const totalDuration = useMemo(() => {
+    if (!playlist) return 0;
+    return playlist.tracks.reduce((sum, track) => sum + parseDuration(track.duration), 0);
+  }, [playlist]);
+
+  const totalDurationFormatted = formatDuration(totalDuration);
+
+  const defaultPlaylistImage = "https://placehold.co/200x200/E0E0E0/A0A0A0?text=Playlist";
+  const playlistImage = playlist?.artwork_url || defaultPlaylistImage;
+
+  const handlePlayPause = () => {
+    if (!playlist || playlist.tracks.length === 0) return;
+    const isFirstTrackPlaying = isPlaying && currentTrack?.id === playlist.tracks[0]?.id;
+    if (isFirstTrackPlaying) {
+      pause();
+    } else {
+      play(playlist.tracks[0], playlist.tracks);
+    }
+  };
+
+  const isCurrentPlaylistPlaying = isPlaying && playlist?.tracks.some(track => track.id === currentTrack?.id);
 
   if (isLoading) {
     return (
@@ -277,7 +350,7 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
     return (
       <div className="p-10 text-center text-neutral-500 space-y-4">
         <p>Playlist no encontrada.</p>
-        <Link href="/biblioteca" passHref>
+        <Link href="/library" passHref>
           <Button variant="outline" className="flex items-center gap-2">
             <ChevronLeft className="size-4" /> Volver a Biblioteca
           </Button>
@@ -286,109 +359,350 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
     );
   }
 
-  const tracksToRender = playlist.tracks;
-
   return (
-    <div className="space-y-6">
-      <Link href="/biblioteca" passHref>
-        <Button variant="ghost" className="flex items-center gap-2">
-          <ChevronLeft className="size-4" /> Volver a Biblioteca
-        </Button>
-      </Link>
+    <div className="space-y-4 md:space-y-6">
+      {isMobile ? (
+        // Mobile Layout (Spotify-like)
+        <>
+          {/* Header */}
+          <div className="flex items-center gap-2">
+            <Link href="/library" passHref>
+              <Button variant="ghost" className="p-0">
+                <ChevronLeft className="size-6" />
+              </Button>
+            </Link>
+            {isReordering && (
+              <div className="flex-1 text-center font-bold">Cambiar orden</div>
+            )}
+          </div>
 
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">{playlist.name}</h1>
-          <p className="text-neutral-600">{tracksToRender.length} canciones</p>
-        </div>
-        <div className="flex flex-wrap justify-center gap-2 md:flex-nowrap md:justify-end">
-          <Button onClick={() => setIsAddTrackDialogOpen(true)} className="flex items-center gap-2">
-            <Plus className="size-4" /> Añadir canciones
-          </Button>
-          <Button variant="outline" onClick={() => setIsEditNameDialogOpen(true)} className="flex items-center gap-2">
-            <Edit className="size-4" /> Editar
-          </Button>
-          <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)} className="flex items-center gap-2">
-            <Trash2 className="size-4" /> Eliminar Playlist
-          </Button>
-        </div>
-      </div>
+          {/* Search Bar */}
+          {!isReordering && (
+            <div className="relative">
+              <Input
+                placeholder="Buscar en la playlist"
+                className="pl-10 bg-neutral-100 rounded-full"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-5 text-neutral-500" />
+            </div>
+          )}
 
-      <div className="mt-8">
-        {/* Cabecera visible solo en sm+ para ahorrar espacio en móvil */}
-        <div className="hidden sm:grid grid-cols-[auto_1fr_120px_60px_auto] gap-2 py-2 px-3 border-b border-neutral-200 text-xs font-semibold text-neutral-500 uppercase">
-          <div className="text-center">#</div>
-          <div>Título</div>
-          <div className="hidden md:block">Álbum</div>
-          <div className="text-right">Duración</div>
-          <div className="text-right"></div>
-        </div>
+          {/* Playlist Info */}
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative size-48 rounded-lg overflow-hidden bg-neutral-200">
+              <Image
+                src={playlistImage}
+                alt={`Carátula de ${playlist.name}`}
+                fill
+                className="object-cover"
+              />
+            </div>
+            <div className="text-center">
+              <h1 className="text-2xl font-bold">{playlist.name}</h1>
+              <p className="text-neutral-600 mt-1">
+                {playlist.tracks.length} canciones • {totalDurationFormatted}
+              </p>
+            </div>
+          </div>
 
-        {/* DndContext con modificadores para movimiento vertical y restricción de bordes */}
-        <DndContext 
-          sensors={sensors} 
-          collisionDetection={closestCorners} 
-          onDragStart={handleDragStart} 
-          onDragEnd={handleDragEnd}    
-          modifiers={modifiers} 
+          {/* Controls */}
+          {isReordering ? (
+            <div className="flex items-center justify-center gap-4">
+              <Button variant="ghost" className="text-neutral-500 font-bold" onClick={handleReorderCancel}>
+                Cancelar
+              </Button>
+              <Button className="bg-black text-white rounded-full font-bold" onClick={handleReorderSave}>
+                Guardar
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-4">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("size-10 p-0", shuffleMode && "text-black", "text-neutral-500 hover:text-black")}
+                onClick={toggleShuffle}
+              >
+                <Shuffle className="size-6" />
+              </Button>
+              <Button
+                className="bg-black text-white rounded-full size-14 p-0 flex items-center justify-center"
+                onClick={handlePlayPause}
+              >
+                {isCurrentPlaylistPlaying ? <PauseCircle className="size-8" /> : <PlayCircle className="size-8" />}
+              </Button>
+              <Popover open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-10 p-0 text-neutral-500 hover:text-black">
+                    <MoreHorizontal className="size-6" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-0" align="start">
+                  <div className="flex flex-col">
+                    <Button
+                      variant="ghost"
+                      className="justify-start px-4 py-2 text-left hover:bg-neutral-100"
+                      onClick={() => {
+                        setIsReordering(true);
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <GripVertical className="size-4 mr-2" />
+                      Cambiar orden
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="justify-start px-4 py-2 text-left hover:bg-neutral-100"
+                      onClick={() => {
+                        setIsAddTrackDialogOpen(true);
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <Plus className="size-4 mr-2" />
+                      Añadir canciones
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="justify-start px-4 py-2 text-left hover:bg-neutral-100"
+                      onClick={() => {
+                        setIsEditNameDialogOpen(true);
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <Edit className="size-4 mr-2" />
+                      Editar playlist
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="justify-start px-4 py-2 text-left hover:bg-neutral-100 text-red-500"
+                      onClick={() => {
+                        setIsDeleteDialogOpen(true);
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <Trash2 className="size-4 mr-2 text-red-500" />
+                      Eliminar playlist
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
+        </>
+      ) : (
+        // Desktop Layout (Spotify-like)
+        <>
+          {/* Header y barra de búsqueda */}
+          <div className="flex items-center justify-between gap-4">
+            <Link href="/library" passHref>
+              <Button variant="ghost" className="p-0">
+                <ChevronLeft className="size-6" />
+              </Button>
+            </Link>
+            {!isReordering && (
+              <div className="relative flex-grow">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-neutral-500" />
+                <Input
+                  type="text"
+                  placeholder="Buscar en la playlist..."
+                  className="w-full pl-9 pr-4 py-2 text-sm rounded-md bg-neutral-100 focus:bg-neutral-50 border border-transparent focus:border-neutral-200 transition-colors"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            )}
+            {isReordering && (
+              <div className="flex-1 text-center font-bold text-xl">Cambiar orden</div>
+            )}
+          </div>
+
+          {/* Playlist Info */}
+          <div className="flex flex-row gap-6">
+            <div className="relative size-48 flex-shrink-0 rounded-lg overflow-hidden bg-neutral-200">
+              <Image
+                src={playlistImage}
+                alt={`Carátula de ${playlist.name}`}
+                fill
+                className="object-cover"
+              />
+            </div>
+            <div className="flex flex-col justify-end flex-1">
+              <h1 className="text-4xl font-bold">{playlist.name}</h1>
+              <p className="text-neutral-600 mt-2">
+                {playlist.tracks.length} canciones • {totalDurationFormatted}
+              </p>
+            </div>
+          </div>
+
+          {/* Controls */}
+          {isReordering ? (
+            <div className="flex items-center justify-start gap-4">
+              <Button variant="ghost" className="text-neutral-500 font-bold" onClick={handleReorderCancel}>
+                Cancelar
+              </Button>
+              <Button className="bg-black text-white rounded-full font-bold" onClick={handleReorderSave}>
+                Guardar
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("size-10 p-0 text-neutral-500 hover:text-black", shuffleMode && "text-black")}
+                onClick={toggleShuffle}
+              >
+                <Shuffle className="size-6" />
+              </Button>
+              <Button
+                className="bg-black text-white rounded-full size-14 p-0 flex items-center justify-center"
+                onClick={handlePlayPause}
+              >
+                {isCurrentPlaylistPlaying ? <PauseCircle className="size-8" /> : <PlayCircle className="size-8" />}
+              </Button>
+              <Popover open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-10 p-0 text-neutral-500 hover:text-black">
+                    <MoreHorizontal className="size-6" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-0" align="end">
+                  <div className="flex flex-col">
+                    <Button
+                      variant="ghost"
+                      className="justify-start px-4 py-2 text-left hover:bg-neutral-100"
+                      onClick={() => {
+                        setIsReordering(true);
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <GripVertical className="size-4 mr-2" />
+                      Cambiar orden
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="justify-start px-4 py-2 text-left hover:bg-neutral-100"
+                      onClick={() => {
+                        setIsAddTrackDialogOpen(true);
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <Plus className="size-4 mr-2" />
+                      Añadir canciones
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="justify-start px-4 py-2 text-left hover:bg-neutral-100"
+                      onClick={() => {
+                        setIsEditNameDialogOpen(true);
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <Edit className="size-4 mr-2" />
+                      Editar playlist
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="justify-start px-4 py-2 text-left hover:bg-neutral-100 text-red-500"
+                      onClick={() => {
+                        setIsDeleteDialogOpen(true);
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <Trash2 className="size-4 mr-2 text-red-500" />
+                      Eliminar playlist
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Tracks List */}
+      <div className="mt-4">
+        {/* Encabezado de la lista de canciones */}
+        <div
+          className={cn(
+            "grid items-center px-4 py-2 text-xs font-light text-neutral-500 border-b border-neutral-200",
+            isMobile ? "grid-cols-[20px_1fr_auto]" : "md:grid-cols-[20px_4fr_2fr_1fr_1fr_auto] md:gap-x-4"
+          )}
         >
-          {/* SortableContext para la lista de canciones ordenables */}
-          <SortableContext items={trackIds} strategy={verticalListSortingStrategy}> 
-            <div ref={containerRef} className="space-y-1 mt-2">
-              {tracksToRender.length === 0 ? (
-                <p className="text-neutral-500 col-span-full py-4 text-center">Aún no hay canciones en esta playlist.</p>
+          <span className="text-center">#</span>
+          <span className="truncate">Título</span>
+          {!isMobile && <span className="truncate">Álbum</span>}
+          {!isMobile && <span className="truncate">Fecha en la que se añadió</span>}
+          <span className="truncate">Duración</span>
+          <span className="sr-only">Acciones</span>
+        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
+          onDragEnd={handleDragEnd}
+          modifiers={modifiers}
+        >
+          <SortableContext items={trackIds} strategy={verticalListSortingStrategy}>
+            <div
+              ref={containerRef}
+              className="space-y-1 mt-2 overflow-y-auto max-h-[calc(100vh-400px)]"
+            >
+              {filteredTracks.length === 0 ? (
+                <p className="text-neutral-500 col-span-full py-4 text-center">No se encontraron canciones.</p>
               ) : (
-                tracksToRender.map((track, index) => ( 
-                  <SortableTrack 
-                    key={String(track.id)} 
-                    id={String(track.id)}  
+                filteredTracks.map((track, index) => (
+                  <SortableTrack
+                    key={String(track.id)}
+                    id={String(track.id)}
                     track={track}
-                    index={index} 
-                    queue={tracksToRender}
-                    onRemoveFromPlaylist={handleRemoveTrack} 
+                    index={index}
+                    queue={filteredTracks}
+                    onRemoveFromPlaylist={handleRemoveTrack}
+                    isMobile={isMobile}
+                    isReordering={isReordering}
                   />
                 ))
               )}
             </div>
           </SortableContext>
-          
-          {/* DragOverlay para el "clon" flotante (estilo Spotify) */}
           <DragOverlay>
             {activeTrack ? (
-              <TrackRow 
-                track={activeTrack} 
-                index={tracksToRender.findIndex(t => t.id === activeTrack.id)} 
-                queue={[]} 
-                isOverlay={true} // Indicar que es un overlay
+              <TrackRow
+                track={activeTrack}
+                index={filteredTracks.findIndex(t => t.id === activeTrack.id)}
+                queue={[]}
+                isOverlay={true}
+                isMobile={isMobile}
+                isReordering={isReordering}
               />
             ) : null}
           </DragOverlay>
-
         </DndContext>
       </div>
-
       <AddTrackToPlaylistDialog
         open={isAddTrackDialogOpen}
         onOpenChange={setIsAddTrackDialogOpen}
         playlistId={playlistId}
-        currentTracks={tracksToRender}
-        onPlaylistUpdated={fetchPlaylistDetails} 
+        currentTracks={playlist?.tracks || []}
+        onPlaylistUpdated={fetchPlaylistDetails}
       />
-
       <EditPlaylistNameDialog
         open={isEditNameDialogOpen}
         onOpenChange={setIsEditNameDialogOpen}
         playlistId={playlistId}
-        currentName={playlist.name}
-        onPlaylistUpdated={fetchPlaylistDetails} 
+        currentName={playlist?.name || ''}
+        onPlaylistUpdated={fetchPlaylistDetails}
       />
-
       <DeletePlaylistDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         playlistId={playlistId}
-        playlistName={playlist.name}
-        onPlaylistDeleted={handleDeletePlaylist} 
+        playlistName={playlist?.name || ''}
+        onPlaylistDeleted={handleDeletePlaylist}
       />
     </div>
   );

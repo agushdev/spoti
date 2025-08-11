@@ -30,3 +30,6 @@ class PlaylistResponse(BaseModel):
 class PagedTracksResponse(BaseModel):
     total: int
     items: List[TrackBase]
+
+class ReorderTracksRequest(BaseModel):
+    trackIds: List[int]

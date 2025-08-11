@@ -121,3 +121,7 @@
     @apply bg-background text-foreground;
   }
 }
+
+.touch-action-none {
+  touch-action: none;
+}

@@ -12,7 +12,7 @@ from pathlib import Path # Importar Path para manejo robusto de rutas de archivo
 # Importa los modelos de la base de datos
 from .database import engine, Base, get_db
 from back.models import Playlist, Track 
-from back.schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse
+from back.schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse, ReorderTracksRequest
 
 app = FastAPI(
     title="Minimalist Music Stream API",
@@ -300,4 +300,55 @@ async def upload_track(
         "message": "Track and cover uploaded successfully!",
         "track_id": new_track.id,
         "title": new_track.title
+    }
+
+@app.put("/api/playlists/{playlist_id}/reorder")
+async def reorder_playlist_tracks(
+    playlist_id: int, 
+    request_body: ReorderTracksRequest, 
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Reordena las canciones de una playlist basándose en una lista de IDs de canciones.
+    """
+    playlist_result = await db.execute(
+        select(Playlist).options(selectinload(Playlist.tracks)).filter(Playlist.id == playlist_id)
+    )
+    playlist = playlist_result.scalars().first()
+
+    if not playlist:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Playlist no encontrada"
+        )
+    
+    # Mapea los IDs de las canciones a un diccionario para un acceso rápido
+    existing_tracks_map = {track.id: track for track in playlist.tracks}
+    
+    # Crea una nueva lista de tracks en el nuevo orden
+    new_tracks_order = []
+    for track_id in request_body.trackIds:
+        track = existing_tracks_map.get(track_id)
+        if track:
+            new_tracks_order.append(track)
+    
+    # Actualiza la lista de canciones de la playlist en la base de datos
+    playlist.tracks = new_tracks_order
+    
+    try:
+        await db.commit()
+        await db.refresh(playlist)
+    except exc.IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Error de integridad al reordenar la playlist"
+        )
+
+    tracks_data = [TrackBase.model_validate(t).model_dump() for t in playlist.tracks]
+
+    return {
+        "id": playlist.id,
+        "name": playlist.name,
+        "tracks": tracks_data
     }
