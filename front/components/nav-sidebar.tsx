@@ -1,43 +1,186 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { cn } from "@/lib/utils"
-import { Home, Library, User, Search } from 'lucide-react'
+import { Home, User, Library, Plus } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+import { useEffect, useState, useCallback } from "react";
+import { Button } from "./ui/button";
+import { AddPlaylistDialog } from "./add-playlist-dialog";
+import { toast } from 'sonner';
+import Image from "next/image"; // ✅ Importar el componente Image de Next.js
+
+// Define el tipo Playlist para lo que esperamos del backend
+type Playlist = {
+  id: number;
+  name: string;
+  tracks: any[]; // No necesitamos los detalles completos de las canciones aquí
+  artwork_url?: string | null; // Incluir artwork_url si el backend lo envía
+};
 
 export function NavSidebar() {
-  const pathname = usePathname()
-  const items = [
-    { href: "/library", label: "Biblioteca", icon: Library },
-    { href: "/profile", label: "Perfil", icon: User },
-  ]
+  const pathname = usePathname();
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(true);
+  const [isAddPlaylistDialogOpen, setIsAddPlaylistDialogOpen] = useState(false);
+
+  const fetchPlaylists = useCallback(async () => {
+    setIsLoadingPlaylists(true);
+    try {
+      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+      const response = await fetch(`http://${host}:8000/api/playlists`);
+      if (!response.ok) {
+        throw new Error("Error al cargar las playlists.");
+      }
+      const data: Playlist[] = await response.json();
+      setPlaylists(data);
+    } catch (error) {
+      console.error("Error fetching playlists:", error);
+      toast.error("Error", { description: "No se pudieron cargar tus playlists." });
+    } finally {
+      setIsLoadingPlaylists(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPlaylists();
+  }, [fetchPlaylists]);
+
+  const handlePlaylistCreated = () => {
+    fetchPlaylists(); // Recarga las playlists después de crear una nueva
+  };
+
+  // ✅ Placeholder ahora es 40x40 para coincidir con el nuevo tamaño de imagen
+  const defaultPlaceholderUrl = "https://placehold.co/40x40/cccccc/444444?text=PL"; 
+
   return (
-    <nav className="px-2 py-2">
+    <nav className="flex flex-col gap-2 p-4 pt-0 text-sm font-medium">
+
+      {/* Separador */}
+      <div className="my-4 border-b border-neutral-200" />
+
+      {/* Sección de Navegación Principal */}
       <Link
         href="/"
         className={cn(
-          "flex items-center gap-2 px-4 py-2 rounded-xl text-sm hover:bg-neutral-100 transition-colors",
-          pathname === "/" && "bg-neutral-100"
+          "flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-neutral-100 transition-colors",
+          pathname === "/" ? "bg-neutral-100 text-black" : "text-neutral-600"
         )}
       >
-        <Home className="size-4" />
-        <span>Inicio</span>
+        <Home className="size-5" />
+        Inicio
       </Link>
-      <div className="mt-2 grid gap-1">
-        {items.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-xl text-sm hover:bg-neutral-100 transition-colors",
-              pathname === item.href && "bg-neutral-100"
-            )}
-          >
-            <item.icon className="size-4" />
-            <span>{item.label}</span>
-          </Link>
-        ))}
+
+      <Link
+        href="/library"
+        className={cn(
+          "flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-neutral-100 transition-colors",
+          pathname === "/library" ? "bg-neutral-100 text-black" : "text-neutral-600"
+        )}
+      >
+        <Library className="size-5" />
+        Biblioteca
+      </Link>
+
+      <Link
+        href="/profile"
+        className={cn(
+          "flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-neutral-100 transition-colors",
+          pathname === "/profile" ? "bg-neutral-100 text-black" : "text-neutral-600"
+        )}
+      >
+        <User className="size-5" />
+        Perfil
+      </Link>
+
+      {/* Separador */}
+      <div className="my-4 border-b border-neutral-200" />
+
+      {/* Sección de Playlists Rápidas */}
+      <div className="flex justify-between items-center px-4">
+        <h3 className="font-semibold text-neutral-800">Tus Playlists</h3>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="rounded-full hover:bg-neutral-100 text-neutral-500"
+          onClick={() => setIsAddPlaylistDialogOpen(true)}
+          aria-label="Crear nueva playlist"
+        >
+          <Plus className="size-5" />
+        </Button>
       </div>
+
+      <div className="flex flex-col gap-1 mt-2 max-h-48 overflow-y-auto custom-scrollbar">
+        {isLoadingPlaylists ? (
+          <p className="text-neutral-500 px-4 py-2">Cargando playlists...</p>
+        ) : playlists.length === 0 ? (
+          <p className="text-neutral-500 px-4 py-2">No tienes playlists.</p>
+        ) : (
+          playlists.map((playlist) => {
+            let playlistImageUrl = playlist.artwork_url;
+            if (playlistImageUrl && !playlistImageUrl.startsWith('http') && !playlistImageUrl.startsWith('/')) {
+              playlistImageUrl = `/cover_art/${playlistImageUrl}`;
+            } else if (!playlistImageUrl) {
+              playlistImageUrl = defaultPlaceholderUrl;
+            }
+
+            return (
+              <Link
+                key={playlist.id}
+                href={`/playlists/${playlist.id}`}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-neutral-100 transition-colors truncate",
+                  pathname === `/playlists/${playlist.id}` ? "bg-neutral-100 text-black" : "text-neutral-600"
+                )}
+                title={playlist.name} // Añadir title para tooltip en caso de truncado
+              >
+                {/* ✅ Imagen de la carátula - Aumentado el tamaño a size-10 (40px) */}
+                <div className="relative size-10 flex-shrink-0 rounded-md overflow-hidden bg-neutral-200">
+                  <Image
+                    src={playlistImageUrl}
+                    alt={`Carátula de ${playlist.name}`}
+                    fill
+                    sizes="40px" // ✅ Actualizado el prop sizes para que coincida con size-10
+                    className="object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = defaultPlaceholderUrl;
+                    }}
+                  />
+                </div>
+                <span className="truncate">{playlist.name}</span> {/* Asegura que el nombre se trunca */}
+              </Link>
+            );
+          })
+        )}
+      </div>
+
+      {/* Diálogo para crear nueva playlist (asegúrate de que este componente exista) */}
+      <AddPlaylistDialog 
+        open={isAddPlaylistDialogOpen} 
+        onOpenChange={setIsAddPlaylistDialogOpen}
+        onPlaylistCreated={handlePlaylistCreated}
+      />
+
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: #e0e0e0;
+          border-radius: 20px;
+          border: 2px solid transparent;
+          background-clip: content-box;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background-color: #bdbdbd;
+        }
+      `}</style>
     </nav>
-  )
+  );
 }

@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { TrackRow } from "@/components/track-row";
+import { TrackRow } from "@/components/track-row"; 
 import Link from "next/link";
-import { ChevronLeft, Plus, Edit, Trash2, PlayCircle, Shuffle, MoreHorizontal, Search, PauseCircle, GripVertical, Check } from 'lucide-react';
+import Image from "next/image";
+import { ChevronLeft, Plus, Edit, Trash2, PlayCircle, Shuffle, MoreHorizontal, Search, PauseCircle, GripVertical, Check, Image as ImageIcon } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
-import { AddTrackToPlaylistDialog } from '@/components/add-track-to-playlist-dialog';
-import { EditPlaylistNameDialog } from '@/components/edit-playlist-name-dialog';
-import { DeletePlaylistDialog } from '@/components/delete-playlist-dialog';
+import { AddTrackToPlaylistDialog } from '@/components/add-track-to-playlist-dialog'; 
+import { EditPlaylistNameDialog } from '@/components/edit-playlist-name-dialog'; 
+import { DeletePlaylistDialog } from '@/components/delete-playlist-dialog'; 
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -39,8 +40,8 @@ import {
 } from "@dnd-kit/sortable";
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { SortableTrack } from '@/components/sortable-track';
-import Image from "next/image";
 import { toast } from 'sonner';
+import { EditPlaylistImageDialog } from '@/components/edit-playlist-image-dialog'; 
 
 type Track = {
   id: number;
@@ -76,28 +77,31 @@ function parseDuration(durationStr: string): number {
 
 export default function PlaylistDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const { play, shuffleMode, toggleShuffle, currentTrack, isPlaying, pause } = usePlayer();
-  const [playlistId, setPlaylistId] = useState<number | null>(null);
+  const { play, shuffleMode, toggleShuffle, current: currentTrack, isPlaying, toggle: pause } = usePlayer();
+
+  // ✅ MODIFICACIÓN CLAVE: Usar useMemo para parsear el ID una sola vez
+  // Esto asegura que playlistId sea una dependencia estable y ayuda a Next.js a no emitir la advertencia.
+  const playlistId = useMemo(() => {
+    return parseInt(params.id, 10);
+  }, [params.id]); // params.id es la única dependencia para esta memoización
+
+
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddTrackDialogOpen, setIsAddTrackDialogOpen] = useState(false);
   const [isEditNameDialogOpen, setIsEditNameDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isEditImageDialogOpen, setIsEditImageDialogOpen] = useState(false);
+
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   const [scrollDirection, setScrollDirection] = useState<'up' | 'down' | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isReordering, setIsReordering] = useState(false);
   const [initialPlaylistTracks, setInitialPlaylistTracks] = useState<Track[] | null>(null);
-
-  useEffect(() => {
-    if (params.id) {
-        setPlaylistId(parseInt(params.id, 10));
-    }
-  }, [params.id]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -117,12 +121,12 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: 100, // Reduced for quicker response like Spotify
-        tolerance: 15, // Increased for better touch accuracy
+        delay: 100,
+        tolerance: 15,
       },
       onActivation: ({ event }) => {
         if (!(event.target instanceof Element) || !event.target.closest('[data-dnd-handle]')) {
-          event.cancelable && event.preventDefault(); // Prevent dragging unless on handle
+          event.cancelable && event.preventDefault();
         }
       },
     }),
@@ -157,7 +161,14 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
   }, [scrollDirection]);
 
   const fetchPlaylistDetails = useCallback(async () => {
-    if (!playlistId) return;
+    // Aquí ya usamos el playlistId que fue memoizado
+    if (isNaN(playlistId)) { 
+        console.error("ID de Playlist inválido:", playlistId); // Usar playlistId directamente
+        setIsLoading(false);
+        setPlaylist(null);
+        return;
+    }
+
     try {
       const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
       const response = await fetch(`http://${host}:8000/api/playlists/${playlistId}`);
@@ -165,6 +176,7 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
         const errorText = await response.text();
         console.error(`Error HTTP! Estado: ${response.status}, Cuerpo: ${errorText}`);
         setPlaylist(null);
+        toast.error("Error al cargar playlist", { description: `No se pudo cargar la playlist. Estado: ${response.status}.` });
       } else {
         const data: Playlist = await response.json();
         setPlaylist(data);
@@ -173,16 +185,47 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
     } catch (error) {
       console.error("Error al obtener detalles de la playlist:", error);
       setPlaylist(null);
+      toast.error("Error de conexión", { description: "No se pudo conectar con el servidor de música." });
     } finally {
       setIsLoading(false);
     }
-  }, [playlistId]);
+  // ✅ MODIFICACIÓN CLAVE: La dependencia ahora es solo playlistId (el valor memoizado)
+  }, [playlistId]); 
 
   useEffect(() => {
-    if (playlistId) {
+    // Si playlistId es un número válido, entonces llama a fetchPlaylistDetails
+    if (!isNaN(playlistId)) {
         fetchPlaylistDetails();
     }
   }, [fetchPlaylistDetails, playlistId]);
+
+  const handleUpdateArtworkUrl = useCallback(async (newImageUrl: string | null) => {
+    if (!playlist) return;
+
+    try {
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${window.location.hostname}:8000`;
+        const response = await fetch(`${apiBaseUrl}/api/playlists/${playlist.id}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ artwork_url: newImageUrl }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Error al actualizar carátula: Status: ${response.status}, Body: ${errorText}`);
+            throw new Error(`Error al actualizar carátula: ${errorText}`);
+        } else {
+            toast.success("Carátula de playlist actualizada.");
+            fetchPlaylistDetails();
+        }
+    } catch (error: any) {
+        console.error("Error de conexión al actualizar carátula:", error);
+        toast.error("Error de red", { description: error.message || "No se pudo conectar con el servidor para actualizar la imagen." });
+    }
+  }, [playlist, fetchPlaylistDetails]);
+
 
   const handleRemoveTrack = useCallback(async (trackToRemoveId: number) => {
     if (!playlist) return;
@@ -229,16 +272,16 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id);
     if ('vibrate' in navigator) {
-      navigator.vibrate(50); // Haptic feedback on mobile
+      navigator.vibrate(50);
     }
   };
-  
+
   const handleDragMove = (event: DragMoveEvent) => {
     if (!containerRef.current || !event.active.rect.current.translated) {
       setScrollDirection(null);
       return;
     }
-    
+
     const { clientHeight, scrollTop } = containerRef.current;
     const scrollThreshold = 50;
     const pointerY = event.active.rect.current.translated.top - containerRef.current.getBoundingClientRect().top + scrollTop;
@@ -300,7 +343,7 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
   }, [initialPlaylistTracks, playlist]);
 
   const trackIds = useMemo(() => playlist?.tracks.map(t => String(t.id)) || [], [playlist]);
-  
+
   const activeTrack = useMemo(() => {
     if (!activeId || !playlist) return null;
     return playlist.tracks.find(t => String(t.id) === String(activeId));
@@ -323,8 +366,13 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
 
   const totalDurationFormatted = formatDuration(totalDuration);
 
-  const defaultPlaylistImage = "https://placehold.co/200x200/E0E0E0/A0A0A0?text=Playlist";
-  const playlistImage = playlist?.artwork_url || defaultPlaylistImage;
+  const defaultPlaylistArtworkUrl = "https://placehold.co/200x200/cccccc/444444?text=Playlist";
+  let playlistImage = playlist?.artwork_url || defaultPlaylistArtworkUrl;
+
+  if (playlist?.artwork_url && !playlist.artwork_url.startsWith('http') && !playlist.artwork_url.startsWith('/')) {
+    playlistImage = `/cover_art/${playlist.artwork_url}`;
+  }
+
 
   const handlePlayPause = () => {
     if (!playlist || playlist.tracks.length === 0) return;
@@ -362,9 +410,7 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
   return (
     <div className="space-y-4 md:space-y-6">
       {isMobile ? (
-        // Mobile Layout (Spotify-like)
         <>
-          {/* Header */}
           <div className="flex items-center gap-2">
             <Link href="/library" passHref>
               <Button variant="ghost" className="p-0">
@@ -376,7 +422,6 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
             )}
           </div>
 
-          {/* Search Bar */}
           {!isReordering && (
             <div className="relative">
               <Input
@@ -389,15 +434,24 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
             </div>
           )}
 
-          {/* Playlist Info */}
           <div className="flex flex-col items-center gap-4">
-            <div className="relative size-48 rounded-lg overflow-hidden bg-neutral-200">
+            <div className="relative size-48 rounded-lg overflow-hidden bg-neutral-200 shadow-md flex-shrink-0 group">
               <Image
                 src={playlistImage}
                 alt={`Carátula de ${playlist.name}`}
                 fill
                 className="object-cover"
               />
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button
+                  size="icon"
+                  className="rounded-full size-10 bg-white/30 text-white hover:bg-white/50"
+                  onClick={() => setIsEditImageDialogOpen(true)}
+                  aria-label="Cambiar carátula de playlist"
+                >
+                  <ImageIcon className="size-5" />
+                </Button>
+              </div>
             </div>
             <div className="text-center">
               <h1 className="text-2xl font-bold">{playlist.name}</h1>
@@ -407,7 +461,6 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
             </div>
           </div>
 
-          {/* Controls */}
           {isReordering ? (
             <div className="flex items-center justify-center gap-4">
               <Button variant="ghost" className="text-neutral-500 font-bold" onClick={handleReorderCancel}>
@@ -476,6 +529,17 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
                     </Button>
                     <Button
                       variant="ghost"
+                      className="justify-start px-4 py-2 text-left hover:bg-neutral-100"
+                      onClick={() => {
+                        setIsEditImageDialogOpen(true);
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <ImageIcon className="size-4 mr-2" />
+                      Cambiar carátula
+                    </Button>
+                    <Button
+                      variant="ghost"
                       className="justify-start px-4 py-2 text-left hover:bg-neutral-100 text-red-500"
                       onClick={() => {
                         setIsDeleteDialogOpen(true);
@@ -492,9 +556,7 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
           )}
         </>
       ) : (
-        // Desktop Layout (Spotify-like)
         <>
-          {/* Header y barra de búsqueda */}
           <div className="flex items-center justify-between gap-4">
             <Link href="/library" passHref>
               <Button variant="ghost" className="p-0">
@@ -518,15 +580,24 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
             )}
           </div>
 
-          {/* Playlist Info */}
           <div className="flex flex-row gap-6">
-            <div className="relative size-48 flex-shrink-0 rounded-lg overflow-hidden bg-neutral-200">
+            <div className="relative size-48 flex-shrink-0 rounded-lg overflow-hidden bg-neutral-200 shadow-md group">
               <Image
                 src={playlistImage}
                 alt={`Carátula de ${playlist.name}`}
                 fill
                 className="object-cover"
               />
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button
+                  size="icon"
+                  className="rounded-full size-10 bg-white/30 text-white hover:bg-white/50"
+                  onClick={() => setIsEditImageDialogOpen(true)}
+                  aria-label="Cambiar carátula de playlist"
+                >
+                  <ImageIcon className="size-5" />
+                </Button>
+              </div>
             </div>
             <div className="flex flex-col justify-end flex-1">
               <h1 className="text-4xl font-bold">{playlist.name}</h1>
@@ -536,7 +607,6 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
             </div>
           </div>
 
-          {/* Controls */}
           {isReordering ? (
             <div className="flex items-center justify-start gap-4">
               <Button variant="ghost" className="text-neutral-500 font-bold" onClick={handleReorderCancel}>
@@ -605,6 +675,17 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
                     </Button>
                     <Button
                       variant="ghost"
+                      className="justify-start px-4 py-2 text-left hover:bg-neutral-100"
+                      onClick={() => {
+                        setIsEditImageDialogOpen(true);
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <ImageIcon className="size-4 mr-2" />
+                      Cambiar carátula
+                    </Button>
+                    <Button
+                      variant="ghost"
                       className="justify-start px-4 py-2 text-left hover:bg-neutral-100 text-red-500"
                       onClick={() => {
                         setIsDeleteDialogOpen(true);
@@ -622,9 +703,7 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
         </>
       )}
 
-      {/* Tracks List */}
       <div className="mt-4">
-        {/* Encabezado de la lista de canciones */}
         <div
           className={cn(
             "grid items-center px-4 py-2 text-xs font-light text-neutral-500 border-b border-neutral-200",
@@ -634,8 +713,7 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
           <span className="text-center">#</span>
           <span className="truncate">Título</span>
           {!isMobile && <span className="truncate">Álbum</span>}
-          {!isMobile && <span className="truncate">Fecha en la que se añadió</span>}
-          <span className="truncate">Duración</span>
+          {!isMobile && <span className="truncate">Duración</span>}
           <span className="sr-only">Acciones</span>
         </div>
         <DndContext
@@ -703,6 +781,14 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
         playlistId={playlistId}
         playlistName={playlist?.name || ''}
         onPlaylistDeleted={handleDeletePlaylist}
+      />
+      <EditPlaylistImageDialog
+        open={isEditImageDialogOpen}
+        onOpenChange={setIsEditImageDialogOpen}
+        playlistId={playlistId}
+        currentImageUrl={playlist?.artwork_url || null}
+        onImageUpdated={fetchPlaylistDetails}
+        onUpdateImageUrl={handleUpdateArtworkUrl}
       />
     </div>
   );

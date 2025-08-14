@@ -6,51 +6,66 @@ import { PlaylistCard } from "@/components/playlist-card";
 import Link from "next/link";
 import { ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useToast } from "@/components/ui/use-toast";
 
-// Definir el tipo de Playlist para el frontend, incluyendo las canciones
+// Definir el tipo de Track para el frontend
 type Track = {
   id: number;
   title: string;
   artist: string;
   album: string;
   duration: string;
-  artwork_url: string | null;
+  artwork_url: string;
   audio_url: string;
 };
 
+// ✅ MODIFICACIÓN CLAVE: Incluir 'artwork_url' en el tipo Playlist
 type Playlist = {
   id: number;
   name: string;
   tracks: Track[];
+  artwork_url?: string | null; // La URL de la carátula de la playlist en sí
 };
 
 export default function BibliotecaPage() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     async function fetchPlaylists() {
       try {
-        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.0.107:8000';
-        const response = await fetch(`${apiBaseUrl}/api/playlists`, {
-          headers: { 'Accept': 'application/json' },
-        });
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+        const apiUrl = `http://${host}:8000/api/playlists`;
+        console.log("Fetching playlists from:", apiUrl);
+        
+        const response = await fetch(apiUrl);
+        
         if (!response.ok) {
           const errorText = await response.text();
-          console.error(`HTTP Error: ${response.status} ${response.statusText}, Body: ${errorText}`);
-          throw new Error('Failed to fetch playlists');
+          console.error(`HTTP error! Status: ${response.status}, Body: ${errorText}`);
+          toast({
+            title: "Error al cargar playlists",
+            description: `No se pudieron cargar tus playlists. Estado: ${response.status}. Mensaje: ${errorText.substring(0, 100)}`,
+            variant: "destructive",
+          });
+          throw new Error(`Error al obtener las playlists: ${response.status} - ${errorText}`);
         }
         const data: Playlist[] = await response.json();
-        console.log("Playlists data:", data);
         setPlaylists(data);
       } catch (error) {
         console.error("Error fetching playlists:", error);
+        toast({
+          title: "Error de conexión",
+          description: "No se pudo conectar con el servidor de música. Asegúrate de que tu backend está activo y accesible.",
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
     }
     fetchPlaylists();
-  }, []);
+  }, [toast]);
 
   if (isLoading) {
     return <div className="p-10 text-center text-neutral-500">Cargando tu biblioteca...</div>;
@@ -69,37 +84,16 @@ export default function BibliotecaPage() {
           {playlists.length === 0 ? (
             <p className="text-neutral-500 col-span-full">Aún no tienes playlists. Crea la primera.</p>
           ) : (
-            playlists.map((playlist) => {
-              
-              let playlistCoverUrl = "/minimal-covers-grid.png"; // Placeholder por defecto desde /public
-
-              // Si hay canciones y la primera tiene una artwork_url válida
-              if (playlist.tracks.length > 0 && playlist.tracks[0].artwork_url) {
-                const artworkUrl = playlist.tracks[0].artwork_url.trim();
-                // Si artworkUrl es una ruta relativa (ej: "/cover_art/piti.jpg")
-                if (artworkUrl.startsWith('/')) {
-                  playlistCoverUrl = artworkUrl;
-                } 
-                // Si es una URL completa (ej: "http://example.com/image.jpg")
-                else if (artworkUrl.startsWith('http://') || artworkUrl.startsWith('https://')) {
-                  playlistCoverUrl = artworkUrl; 
-                }
-                // Si es solo un nombre de archivo (ej: "piti.jpg"), asume que está en public/cover_art
-                else if (artworkUrl !== '') {
-                    playlistCoverUrl = `/cover_art/${artworkUrl}`;
-                }
-              }
-
-              return (
-                <Link key={playlist.id} href={`/playlists/${playlist.id}`}>
-                  <PlaylistCard
-                    title={playlist.name}
-                    count={playlist.tracks.length}
-                    coverUrl={playlistCoverUrl} // Pasa la URL cuidadosamente construida
-                  />
-                </Link>
-              );
-            })
+            playlists.map((playlist) => (
+              <Link key={playlist.id} href={`/playlists/${playlist.id}`}>
+                <PlaylistCard
+                  title={playlist.name}
+                  count={playlist.tracks.length}
+                  // ✅ MODIFICACIÓN: Priorizar playlist.artwork_url si existe
+                  coverUrl={playlist.artwork_url || (playlist.tracks.length > 0 ? playlist.tracks[0].artwork_url : "/minimal-covers-grid.png")}
+                />
+              </Link>
+            ))
           )}
         </div>
       </section>

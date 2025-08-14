@@ -5,69 +5,48 @@ import { motion } from "framer-motion"
 
 type Props = {
   title?: string
-  coverUrl?: string
+  coverUrl?: string // Esto puede ser /ruta/a/img.png (de FastAPI o estático) o http://full.url
   count?: number
 }
 
 export function PlaylistCard({
   title = "Nueva Playlist",
-  coverUrl,
+  coverUrl, 
   count = 0,
 }: Props) {
+  // Define una URL de placeholder por defecto que siempre es válida
   const defaultPlaceholderUrl = `https://placehold.co/64x64/E0E0E0/A0A0A0?text=Playlist`;
+  
+  let finalCoverSource: string;
 
-  // Host seguro tanto en cliente como en servidor
-  const host =
-    typeof window !== "undefined"
-      ? window.location.hostname
-      : process.env.NEXT_PUBLIC_HOST ?? "192.168.0.107";
-
-  function buildSafeUrl(input?: string): string {
-    // Si es nulo, vacío o solo espacios → placeholder
-    if (!input || !input.trim()) return defaultPlaceholderUrl;
-
-    // Si empieza con http:// o https:// → validar con new URL
-    if (input.startsWith("http://") || input.startsWith("https://")) {
-      try {
-        new URL(input); // Valida que sea URL real
-        return input;
-      } catch {
-        return defaultPlaceholderUrl;
-      }
+  // ✅ LÓGICA DE URL SIMPLIFICADA Y ROBUSTA:
+  if (typeof coverUrl === 'string' && coverUrl.trim() !== '') {
+    // Si la URL ya empieza con http:// o https:// (es una URL completa)
+    // O si empieza con '/' (como /cover_art/filename.jpg, que Next.js sirve desde /public)
+    if (coverUrl.startsWith('http://') || coverUrl.startsWith('https://') || coverUrl.startsWith('/')) {
+      finalCoverSource = coverUrl;
+    } 
+    // Si es solo un nombre de archivo (ej., "mi_portada.jpg"), asumimos que está en public/cover_art
+    else {
+      finalCoverSource = `/cover_art/${coverUrl}`;
     }
-
-    // Si empieza con "/" → asumir que es del backend FastAPI
-    if (input.startsWith("/")) {
-      const apiUrl = `http://${host}:8000${input}`;
-      try {
-        new URL(apiUrl);
-        return apiUrl;
-      } catch {
-        return defaultPlaceholderUrl;
-      }
-    }
-
-    // Cualquier otro caso → placeholder
-    return defaultPlaceholderUrl;
+  } else {
+    // Si coverUrl es nulo, indefinido o una cadena vacía, usa el placeholder por defecto
+    finalCoverSource = defaultPlaceholderUrl;
   }
 
-  const finalCoverSource = buildSafeUrl(coverUrl);
-
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="rounded-2xl overflow-hidden border border-black/10"
-    >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-2xl overflow-hidden border border-black/10">
       <div className="relative aspect-square">
-        <Image
-          src={finalCoverSource}
-          alt={`Portada de ${title}`}
-          fill
-          className="object-cover"
+        <Image 
+          src={finalCoverSource} 
+          alt={`Portada de ${title}`} 
+          fill 
+          className="object-cover" 
+          // Manejo de errores en caso de que la imagen no cargue
           onError={(e) => {
-            const target = e.target as HTMLImageElement;
-            target.src = defaultPlaceholderUrl;
+            console.error("PlaylistCard image failed to load:", finalCoverSource);
+            (e.target as HTMLImageElement).src = defaultPlaceholderUrl; 
           }}
         />
       </div>
@@ -76,5 +55,5 @@ export function PlaylistCard({
         <div className="text-sm text-neutral-500">{count} pistas</div>
       </div>
     </motion.div>
-  );
+  )
 }
