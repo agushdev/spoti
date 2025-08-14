@@ -8,14 +8,14 @@ import { useEffect, useState, useCallback } from "react";
 import { Button } from "./ui/button";
 import { AddPlaylistDialog } from "./add-playlist-dialog";
 import { toast } from 'sonner';
-import Image from "next/image"; // ✅ Importar el componente Image de Next.js
+import Image from "next/image"; 
 
 // Define el tipo Playlist para lo que esperamos del backend
 type Playlist = {
   id: number;
   name: string;
-  tracks: any[]; // No necesitamos los detalles completos de las canciones aquí
-  artwork_url?: string | null; // Incluir artwork_url si el backend lo envía
+  tracks: any[]; 
+  artwork_url?: string | null; 
 };
 
 export function NavSidebar() {
@@ -47,18 +47,14 @@ export function NavSidebar() {
   }, [fetchPlaylists]);
 
   const handlePlaylistCreated = () => {
-    fetchPlaylists(); // Recarga las playlists después de crear una nueva
+    fetchPlaylists(); 
   };
 
-  // ✅ Placeholder ahora es 40x40 para coincidir con el nuevo tamaño de imagen
-  const defaultPlaceholderUrl = "https://placehold.co/40x40/cccccc/444444?text=PL"; 
+  // ✅ Placeholder ahora es 48x48 para coincidir con el nuevo tamaño de imagen
+  const defaultPlaceholderUrl = "https://placehold.co/48x48/cccccc/444444?text=PL"; 
 
   return (
     <nav className="flex flex-col gap-2 p-4 pt-0 text-sm font-medium">
-
-      {/* Separador */}
-      <div className="my-4 border-b border-neutral-200" />
-
       {/* Sección de Navegación Principal */}
       <Link
         href="/"
@@ -72,17 +68,6 @@ export function NavSidebar() {
       </Link>
 
       <Link
-        href="/library"
-        className={cn(
-          "flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-neutral-100 transition-colors",
-          pathname === "/library" ? "bg-neutral-100 text-black" : "text-neutral-600"
-        )}
-      >
-        <Library className="size-5" />
-        Biblioteca
-      </Link>
-
-      <Link
         href="/profile"
         className={cn(
           "flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-neutral-100 transition-colors",
@@ -93,12 +78,23 @@ export function NavSidebar() {
         Perfil
       </Link>
 
+      <Link
+        href="/library"
+        className={cn(
+          "flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-neutral-100 transition-colors",
+          pathname === "/library" ? "bg-neutral-100 text-black" : "text-neutral-600"
+        )}
+      >
+        <Library className="size-5" />
+        Biblioteca
+      </Link>
+
       {/* Separador */}
       <div className="my-4 border-b border-neutral-200" />
 
       {/* Sección de Playlists Rápidas */}
       <div className="flex justify-between items-center px-4">
-        <h3 className="font-semibold text-neutral-800">Tus Playlists</h3>
+        <h3 className="font-semibold text-neutral-800">Tu biblioteca</h3>
         <Button 
           variant="ghost" 
           size="icon" 
@@ -132,22 +128,22 @@ export function NavSidebar() {
                   "flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-neutral-100 transition-colors truncate",
                   pathname === `/playlists/${playlist.id}` ? "bg-neutral-100 text-black" : "text-neutral-600"
                 )}
-                title={playlist.name} // Añadir title para tooltip en caso de truncado
+                title={playlist.name} 
               >
-                {/* ✅ Imagen de la carátula - Aumentado el tamaño a size-10 (40px) */}
-                <div className="relative size-10 flex-shrink-0 rounded-md overflow-hidden bg-neutral-200">
+                {/* ✅ Imagen de la carátula - Aumentado el tamaño a size-12 (48px) */}
+                <div className="relative size-12 flex-shrink-0 rounded-md overflow-hidden bg-neutral-200">
                   <Image
                     src={playlistImageUrl}
                     alt={`Carátula de ${playlist.name}`}
                     fill
-                    sizes="40px" // ✅ Actualizado el prop sizes para que coincida con size-10
+                    sizes="48px" // ✅ Actualizado el prop sizes para que coincida con size-12
                     className="object-cover"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = defaultPlaceholderUrl;
                     }}
                   />
                 </div>
-                <span className="truncate">{playlist.name}</span> {/* Asegura que el nombre se trunca */}
+                <span className="truncate">{playlist.name}</span> 
               </Link>
             );
           })

@@ -147,3 +147,7 @@
 .sonner-toast .sonner-toast-icon {
   color: #000000 !important;
 }
+
+.full-screen-player-custom-dialog > button[data-slot="dialog-close"] {
+  display: none !important;
+}
