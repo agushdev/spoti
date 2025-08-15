@@ -1,42 +1,90 @@
-// src/components/player/desktop-player-controls.tsx
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
-import { Slider } from "@/components/ui/slider"
-import { cn } from "@/lib/utils"
-import { usePlayer } from "./player-provider"
-import { Pause, Play, SkipBack, SkipForward, Volume2, Heart, Shuffle, Repeat, Repeat1 } from 'lucide-react' 
-import Image from "next/image"
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { cn } from "@/lib/utils";
+import { usePlayer } from "./player-provider";
+import { Pause, Play, SkipBack, SkipForward, Volume2, Heart, Shuffle, Repeat, Repeat1, Music } from 'lucide-react';
+import Image from "next/image";
+import { useEffect, useState, useRef, useCallback } from "react";
 
-function formatTime(s: number) {
-  if (!Number.isFinite(s)) return "0:00"
-  const m = Math.floor(s / 60)
-  const ss = Math.floor(s % 60)
-  return `${m}:${ss.toString().padStart(2, "0")}`
+type Track = {
+  id: number;
+  title: string;
+  artist: string;
+  album: string;
+  duration: string;
+  artwork_url: string | null;
+  audio_url: string;
+  lyrics_lrc?: string | null;
+};
+
+type LyricLine = {
+  time: number;
+  text: string;
+};
+
+function parseLRC(lrcContent: string): LyricLine[] {
+  const lines = lrcContent.trim().split('\n');
+  const parsedLyrics: LyricLine[] = [];
+
+  lines.forEach(line => {
+    const timeMatch = line.match(/^\[(\d{2}):(\d{2})\.(\d{2,3})\]/);
+    if (timeMatch) {
+      const minutes = parseInt(timeMatch[1], 10);
+      const seconds = parseInt(timeMatch[2], 10);
+      const milliseconds = parseInt(timeMatch[3].padEnd(3, '0'), 10);
+      const timeInSeconds = minutes * 60 + seconds + milliseconds / 1000;
+      
+      let text = line.substring(timeMatch[0].length).trim();
+      text = text.replace(/\[(\d{2}):(\d{2})\.(\d{2,3})\]/g, '').trim();
+      text = text.replace(/\s+/g, ' ').trim();
+      
+      if (text && !parsedLyrics.some(lyric => lyric.text === text && lyric.time === timeInSeconds)) {
+        parsedLyrics.push({ time: timeInSeconds, text });
+      }
+    }
+  });
+
+  parsedLyrics.sort((a, b) => a.time - b.time);
+  return parsedLyrics;
 }
 
-export function DesktopPlayerControls() { // Renombrado a DesktopPlayerControls
-  const { 
-    current, 
-    isPlaying, 
-    toggle, 
-    next, 
-    prev, 
-    progress, 
-    duration, 
-    seek, 
-    volume, 
-    setVolume, 
-    liked, 
-    toggleLike,
-    shuffleMode,   
-    loopMode,      
-    toggleShuffle, 
-    toggleLoop     
-  } = usePlayer()
+function formatTime(s: number) {
+  if (!Number.isFinite(s)) return "0:00";
+  const m = Math.floor(s / 60);
+  const ss = Math.floor(s % 60);
+  return `${m}:${ss.toString().padStart(2, "0")}`;
+}
 
-  const vol = Math.round(volume * 100)
-  
+export function DesktopPlayerControls() {
+  const {
+    current,
+    isPlaying,
+    toggle,
+    next,
+    prev,
+    progress,
+    duration,
+    seek,
+    volume,
+    setVolume,
+    liked,
+    toggleLike,
+    shuffleMode,
+    loopMode,
+    toggleShuffle,
+    toggleLoop,
+  } = usePlayer();
+
+  const vol = Math.round(volume * 100);
+  const [lyrics, setLyrics] = useState<LyricLine[]>([]);
+  const [activeLyricIndex, setActiveLyricIndex] = useState(-1);
+  const [showLyrics, setShowLyrics] = useState(false);
+  const lyricsContainerRef = useRef<HTMLDivElement>(null);
+  const activeLyricRef = useRef<HTMLParagraphElement>(null);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+
   const defaultPlayerCoverUrl = "https://placehold.co/64x64/E0E0E0/A0A0A0?text=No+Cover";
   let playerCoverSource: string;
 
@@ -50,8 +98,76 @@ export function DesktopPlayerControls() { // Renombrado a DesktopPlayerControls
     playerCoverSource = defaultPlayerCoverUrl;
   }
 
-  // Si no hay canción reproduciéndose, no mostrar los controles de desktop (o mostrar un estado vacío)
-  // Decidimos mostrar un estado vacío para que la barra inferior siempre esté presente en desktop.
+  useEffect(() => {
+    if (current?.lyrics_lrc) {
+      const unescapedLrc = current.lyrics_lrc.replace(/\\n/g, '\n');
+      setLyrics(parseLRC(unescapedLrc));
+      setActiveLyricIndex(-1);
+    } else {
+      setLyrics([]);
+      setActiveLyricIndex(-1);
+    }
+  }, [current?.lyrics_lrc]);
+
+  const handleScroll = useCallback(() => {
+    setIsUserScrolling(true);
+  }, []);
+
+  useEffect(() => {
+    const container = lyricsContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll);
+      container.addEventListener('touchmove', handleScroll);
+      return () => {
+        container.removeEventListener('scroll', handleScroll);
+        container.removeEventListener('touchmove', handleScroll);
+      };
+    }
+  }, [handleScroll]);
+
+  useEffect(() => {
+    if (lyrics.length === 0 || !isPlaying || isUserScrolling) return;
+
+    let newActiveIndex = -1;
+    for (let i = 0; i < lyrics.length; i++) {
+      if (progress >= lyrics[i].time) {
+        newActiveIndex = i;
+      } else {
+        break;
+      }
+    }
+    setActiveLyricIndex(newActiveIndex);
+
+    if (activeLyricRef.current && lyricsContainerRef.current) {
+      const container = lyricsContainerRef.current;
+      const activeLine = activeLyricRef.current;
+      const containerHeight = container.clientHeight;
+      const lineHeight = activeLine.offsetHeight;
+      const lineOffsetTop = activeLine.offsetTop;
+      const scrollTop = container.scrollTop;
+      const scrollBottom = scrollTop + containerHeight;
+
+      const isActiveLyricVisible = lineOffsetTop >= scrollTop && lineOffsetTop + lineHeight <= scrollBottom;
+      if (!isActiveLyricVisible) {
+        const desiredScrollTop = lineOffsetTop - (containerHeight / 2) + (lineHeight / 2);
+        container.scrollTo({
+          top: desiredScrollTop,
+          behavior: 'smooth'
+        });
+      }
+    }
+  }, [progress, lyrics, isPlaying, isUserScrolling]);
+
+  const handleLyricClick = useCallback((time: number) => {
+    seek(time);
+    setIsUserScrolling(false);
+  }, [seek]);
+
+  const handleToggleLyrics = useCallback(() => {
+    setShowLyrics(prev => !prev);
+    setIsUserScrolling(false);
+  }, []);
+
   if (!current) {
     return (
       <div className="flex flex-col gap-2 py-3 md:py-4 md:flex-row md:items-center md:gap-6 pb-[env(safe-area-inset-bottom)]">
@@ -74,7 +190,7 @@ export function DesktopPlayerControls() { // Renombrado a DesktopPlayerControls
             <div className="flex items-center gap-2 ml-4">
               <Volume2 className="size-4 text-neutral-400 flex-shrink-0" />
               <Slider value={[0]} max={100} step={1} className="w-[80px]" disabled />
-              <span className="text-xs text-neutral-400 tabular-nums w-8 text-right">0</span> 
+              <span className="text-xs text-neutral-500 tabular-nums w-8 text-right">0</span> 
             </div>
           </div>
           <div className="w-full flex items-center gap-3">
@@ -87,17 +203,13 @@ export function DesktopPlayerControls() { // Renombrado a DesktopPlayerControls
           <Button variant="ghost" size="icon" className="rounded-full"><Heart className="size-5 text-neutral-400" /></Button>
         </div>
       </div>
-    ); 
+    );
   }
 
-
   return (
-    <div className="flex flex-col gap-2 py-3 md:py-4 md:flex-row md:items-center md:gap-6 pb-[env(safe-area-inset-bottom)]">
-      
-      {/* Sección Izquierda: Info de la Pista y Botón de Like */}
-      {/* En desktop: ancho fijo. */}
+    <div className="flex flex-col gap-2 py-3 md:py-4 md:flex-row md:items-center md:gap-6 pb-[env(safe-area-inset-bottom)] bg-white border-t border-neutral-200">
+      {/* Left Section: Track Info and Like Button */}
       <div className="flex items-center gap-3 flex-none w-full md:w-[200px] lg:w-[250px] xl:w-[300px]">
-        {/* Artwork */}
         <div className="size-12 md:size-14 overflow-hidden rounded-xl bg-neutral-100 flex-shrink-0">
           <Image
             src={playerCoverSource}
@@ -111,14 +223,10 @@ export function DesktopPlayerControls() { // Renombrado a DesktopPlayerControls
             }}
           />
         </div>
-
-        {/* Title & Artist */}
-        <div className="min-w-0 flex-1"> {/* Permite que el texto se trunque pero no empuje */}
+        <div className="min-w-0 flex-1">
           <div className="font-medium truncate">{current?.title}</div>
           <div className="text-sm text-neutral-500 truncate">{current?.artist}</div>
         </div>
-
-        {/* Botón Like (solo visible en desktop, en móvil está en la barra completa) */}
         {current && (
           <Button
             variant="ghost"
@@ -126,7 +234,7 @@ export function DesktopPlayerControls() { // Renombrado a DesktopPlayerControls
             aria-label={liked.has(String(current.id)) ? "Quitar de me gusta" : "Agregar a me gusta"}
             onClick={() => toggleLike(String(current.id))}
             className={cn(
-              "ml-1 hover:bg-neutral-100 rounded-full hidden md:flex", // Oculto en móvil
+              "ml-1 hover:bg-neutral-100 rounded-full hidden md:flex",
               liked.has(String(current.id)) ? "text-black" : "text-neutral-500"
             )}
           >
@@ -135,73 +243,65 @@ export function DesktopPlayerControls() { // Renombrado a DesktopPlayerControls
         )}
       </div>
 
-      {/* Sección Central: Controles de Transporte, Volumen y Barra de Progreso */}
+      {/* Center Section: Controls, Volume, and Progress Bar */}
       <div className="flex flex-col items-center gap-2 flex-1 min-w-0 order-last md:order-none">
-        {/* Controles Principales (Shuffle, Prev, Play/Pause, Next, Loop, Volumen) */}
-        <div className="flex items-center w-full justify-center gap-3"> {/* Centrado horizontalmente */}
-          
-          {/* Botón Shuffle */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
+        <div className="flex items-center w-full justify-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
             className={cn("rounded-full hover:bg-neutral-100", shuffleMode ? "text-black" : "text-neutral-500")}
             onClick={toggleShuffle}
             aria-label="Modo aleatorio"
           >
             <Shuffle className="size-5" />
           </Button>
-
-          {/* Botón Prev */}
           <Button variant="ghost" size="icon" className="rounded-full hover:bg-neutral-100" onClick={prev} aria-label="Anterior">
             <SkipBack className="size-5" />
           </Button>
-
-          {/* Botón Play/Pause */}
           <Button
             variant="ghost"
             size="icon"
-            className="rounded-full hover:bg-neutral-100 border border-black/10 flex-shrink-0" 
+            className="rounded-full hover:bg-neutral-100 border border-black/10 flex-shrink-0"
             onClick={toggle}
             aria-label={isPlaying ? "Pausar" : "Reproducir"}
           >
             {isPlaying ? <Pause className="size-5" /> : <Play className="size-5" />}
           </Button>
-
-          {/* Botón Next */}
           <Button variant="ghost" size="icon" className="rounded-full hover:bg-neutral-100" onClick={next} aria-label="Siguiente">
             <SkipForward className="size-5" />
           </Button>
-
-          {/* Botón Loop */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             className={cn("rounded-full hover:bg-neutral-100", loopMode !== 'none' ? "text-black" : "text-neutral-500")}
             onClick={toggleLoop}
             aria-label={`Modo de repetición: ${loopMode === 'none' ? 'Ninguno' : loopMode === 'all' ? 'Toda la lista' : 'Una canción'}`}
           >
-            {loopMode === 'one' ? (
-              <Repeat1 className="size-5" />
-            ) : (
-              <Repeat className="size-5" />
-            )}
+            {loopMode === 'one' ? <Repeat1 className="size-5" /> : <Repeat className="size-5" />}
           </Button>
-
-          {/* ✅ Control de Volumen: Ahora a la derecha de todo el grupo de botones principales */}
-          <div className="flex items-center gap-2 ml-4"> {/* Agrega margen izquierdo para separación */}
+          <div className="flex items-center gap-2 ml-4">
             <Volume2 className="size-4 text-neutral-500 flex-shrink-0" />
             <Slider
               value={[vol]}
               max={100}
               step={1}
               onValueChange={(v) => setVolume((v[0] || 0) / 100)}
-              className="w-[80px]" // Ancho fijo para desktop
+              className="w-[80px]"
             />
-            <span className="text-xs text-neutral-500 tabular-nums w-8 text-right">{vol}</span> 
+            <span className="text-xs text-neutral-500 tabular-nums w-8 text-right">{vol}</span>
           </div>
+          {lyrics.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleToggleLyrics}
+              className={cn("rounded-full hover:bg-neutral-100", showLyrics ? "text-black" : "text-neutral-500")}
+              aria-label={showLyrics ? "Ocultar letras" : "Mostrar letras"}
+            >
+              <Music className="size-5" />
+            </Button>
+          )}
         </div>
-
-        {/* Seek Bar */}
         <div className="w-full flex items-center gap-3">
           <span className="text-xs text-neutral-500 tabular-nums">{formatTime(progress)}</span>
           <Slider
@@ -215,10 +315,48 @@ export function DesktopPlayerControls() { // Renombrado a DesktopPlayerControls
         </div>
       </div>
 
-      {/* Sección Derecha: (Vacía en este diseño, Like en otros) */}
-      <div className="hidden md:flex items-center gap-2 flex-none w-[80px] lg:w-[100px] justify-end">
-        {/* Este espacio puede usarse para un botón de Like en desktop si se desea, o simplemente para balancear el layout */}
-      </div>
+      {/* Right Section: Lyrics */}
+      {showLyrics && lyrics.length > 0 && (
+        <div
+          ref={lyricsContainerRef}
+          className="hidden md:flex flex-col items-center flex-none w-[200px] lg:w-[250px] xl:w-[300px] h-[150px] overflow-y-auto custom-lrc-scrollbar"
+        >
+          <div className="w-full flex flex-col items-center">
+            {lyrics.map((line, index) => (
+              <p
+                key={index}
+                ref={index === activeLyricIndex ? activeLyricRef : null}
+                className={cn(
+                  "text-sm font-medium my-2 px-2 transition-all duration-300 ease-in-out",
+                  "whitespace-normal break-words cursor-pointer",
+                  index === activeLyricIndex ? "text-black font-semibold" : "text-neutral-500 hover:text-neutral-700"
+                )}
+                onClick={() => handleLyricClick(line.time)}
+              >
+                {line.text}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <style jsx global>{`
+        .custom-lrc-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-lrc-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+          border-radius: 10px;
+        }
+        .custom-lrc-scrollbar::-webkit-scrollbar-thumb {
+          background-color: rgba(0,0,0,0.3);
+          border-radius: 10px;
+          border: 1px solid rgba(0,0,0,0.1);
+        }
+        .custom-lrc-scrollbar::-webkit-scrollbar-thumb:hover {
+          background-color: rgba(0,0,0,0.5);
+        }
+      `}</style>
     </div>
-  )
+  );
 }

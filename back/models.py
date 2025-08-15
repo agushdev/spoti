@@ -16,7 +16,7 @@ class Playlist(Base):
     __tablename__ = "playlists"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String, index=True, unique=True)
-    artwork_url: Mapped[Optional[str]] = mapped_column(String, nullable=True) # ✅ Importante: Asegúrate de que esta línea esté aquí
+    artwork_url: Mapped[Optional[str]] = mapped_column(String, nullable=True) 
 
     # Relación "muchos a muchos" con el modelo Track
     tracks: Mapped[List["Track"]] = relationship(
@@ -34,6 +34,7 @@ class Track(Base):
     duration: Mapped[str] = mapped_column(String)
     artwork_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     audio_url: Mapped[str] = mapped_column(String, unique=True)
+    lyrics_lrc: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # Relación "muchos a muchos" con el modelo Playlist
     playlists: Mapped[List["Playlist"]] = relationship(

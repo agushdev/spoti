@@ -19,6 +19,7 @@ type Track = {
   duration: string
   artwork_url: string | null
   audio_url: string
+  lyrics_lrc: string | null // ✅ Campo para las letras
 }
 
 // Definir el tipo para la respuesta paginada del backend
@@ -198,7 +199,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Error cargando canciones desde la API.');
         }
         const pagedData: PagedTracksResponse = await res.json();
-        setQueue(pagedData.items); 
+        setQueue(pagedData.items);
         
         // Cargar última canción y progreso desde localStorage
         const savedTrackId = localStorage.getItem('lastPlayedTrackId');

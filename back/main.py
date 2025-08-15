@@ -7,12 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
-from pathlib import Path
+from pathlib import Path # Importar Path para manejo robusto de rutas de archivo
 
 # Importa los modelos de la base de datos
 from .database import engine, Base, get_db
 from back.models import Playlist, Track 
-from back.schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse, ReorderTracksRequest, PlaylistUpdate # Asegúrate de que ReorderTracksRequest y PlaylistUpdate estén importados
+# ✅ Importa todos los esquemas necesarios, incluyendo PlaylistUpdate, ReorderTracksRequest y TrackUpdate
+from back.schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse, ReorderTracksRequest, PlaylistUpdate, TrackUpdate 
 
 app = FastAPI(
     title="Minimalist Music Stream API",
@@ -77,6 +78,7 @@ async def read_tracks(
             "duration": t.duration,
             "artwork_url": t.artwork_url,
             "audio_url": t.audio_url,
+            "lyrics_lrc": t.lyrics_lrc, # ✅ Incluir lyrics_lrc en la respuesta de /api/tracks
         })
 
     return {
@@ -99,7 +101,7 @@ async def get_all_playlists(db: AsyncSession = Depends(get_db)):
             "id": playlist.id,
             "name": playlist.name,
             "tracks": tracks_data,
-            "artwork_url": playlist.artwork_url # ✅ Incluido artwork_url
+            "artwork_url": playlist.artwork_url 
         })
     return response_data 
 
@@ -122,14 +124,14 @@ async def get_playlist_by_id(playlist_id: int, db: AsyncSession = Depends(get_db
         "id": playlist.id,
         "name": playlist.name,
         "tracks": tracks_data,
-        "artwork_url": playlist.artwork_url # ✅ Incluido artwork_url
+        "artwork_url": playlist.artwork_url 
     }
     return response_data 
 
 @app.post("/api/playlists", response_model=PlaylistResponse, status_code=status.HTTP_201_CREATED)
 async def create_playlist(
     name: str = Form(...), 
-    artwork_file: Optional[UploadFile] = File(None), # Recibe el archivo de imagen opcional
+    artwork_file: Optional[UploadFile] = File(None), 
     db: AsyncSession = Depends(get_db)
 ):
     """Crea una nueva playlist en la base de datos con una carátula opcional."""
@@ -161,7 +163,7 @@ async def create_playlist(
     db.add(new_playlist) 
     try:
         await db.commit() 
-        await db.refresh(new_playlist)
+        await db.refresh(new_playlist) 
         return new_playlist
     except exc.IntegrityError:
         await db.rollback() 
@@ -198,8 +200,7 @@ async def add_track_to_playlist(playlist_id: int, track_id: int, db: AsyncSessio
 
 @app.delete("/api/playlists/{playlist_id}/tracks/{track_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_track_from_playlist(playlist_id: int, track_id: int, db: AsyncSession = Depends(get_db)):
-    """Quita una canción de una playlist."""
-    playlist_result = await db.execute(select(Playlist).filter(Playlist.id == playlist_id))
+    playlist_result = await db.execute(select(Playlist).options(selectinload(Playlist.tracks)).filter(Playlist.id == playlist_id))
     playlist = playlist_result.scalars().first()
     track_result = await db.execute(select(Track).filter(Track.id == track_id))
     track = track_result.scalars().first()
@@ -217,78 +218,38 @@ async def remove_track_from_playlist(playlist_id: int, track_id: int, db: AsyncS
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-# ✅ MODIFICADO: Endpoint PATCH para actualizar nombre Y/O artwork_url
 @app.patch("/api/playlists/{playlist_id}", response_model=PlaylistResponse)
 async def update_playlist(
     playlist_id: int,
-    playlist_update: PlaylistUpdate, # Asume que PlaylistUpdate tiene 'name' y 'artwork_url' opcionales
+    playlist_update: PlaylistUpdate,
     db: AsyncSession = Depends(get_db)
 ):
-    """Actualiza una playlist (nombre y/o URL de carátula)."""
     result = await db.execute(select(Playlist).options(selectinload(Playlist.tracks)).filter(Playlist.id == playlist_id))
     playlist = result.scalars().first()
 
     if not playlist:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Playlist no encontrada")
 
-    update_data = playlist_update.model_dump(exclude_unset=True) # Obtiene solo los campos enviados
+    update_data = playlist_update.model_dump(exclude_unset=True) 
 
     if "name" in update_data and update_data["name"] != playlist.name:
         existing_playlist_with_name_result = await db.execute(select(Playlist).filter(Playlist.name == update_data["name"]))
         existing_playlist_with_name = existing_playlist_with_name_result.scalars().first()
-        if existing_playlist_with_name and existing_playlist_with_name.id != playlist_id:
+        if existing_playlist_with_name and existing_playlist_with_name.id != playlist_id: 
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ya existe una playlist con este nombre.")
         playlist.name = update_data["name"]
 
-    if "artwork_url" in update_data: # Permite actualizar artwork_url directamente (ej. a null para eliminar)
+    if "artwork_url" in update_data: 
         playlist.artwork_url = update_data["artwork_url"]
 
     try:
         await db.commit()
-        await db.refresh(playlist)
+        await db.refresh(playlist) 
     except exc.IntegrityError as e:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Error al actualizar playlist: {e}")
 
     return playlist
-
-
-# ✅ NUEVO ENDPOINT: Para subir solo la imagen de la carátula de una playlist existente
-@app.patch("/api/playlists/{playlist_id}/artwork", response_model=PlaylistResponse)
-async def update_playlist_artwork(
-    playlist_id: int,
-    artwork_file: UploadFile = File(...), # Requiere un archivo
-    db: AsyncSession = Depends(get_db)
-):
-    """Sube y actualiza la carátula de una playlist existente."""
-    result = await db.execute(select(Playlist).filter(Playlist.id == playlist_id))
-    playlist = result.scalars().first()
-
-    if not playlist:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Playlist no encontrada")
-
-    upload_dir = Path(__file__).parent.parent / "front" / "public" / "cover_art"
-    upload_dir.mkdir(parents=True, exist_ok=True) 
-
-    file_extension = Path(artwork_file.filename).suffix
-    unique_filename = f"playlist_cover_{os.urandom(8).hex()}{file_extension}"
-    file_path = upload_dir / unique_filename
-
-    try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(artwork_file.file, buffer)
-        new_artwork_url = f"/cover_art/{unique_filename}"
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error al guardar la carátula: {e}")
-
-    playlist.artwork_url = new_artwork_url
-    try:
-        await db.commit()
-        await db.refresh(playlist)
-        return playlist
-    except exc.IntegrityError:
-        await db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Error al actualizar la carátula de la playlist.")
 
 
 @app.delete("/api/playlists/{playlist_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -314,14 +275,13 @@ async def upload_track(
     album: str = Form(...),
     duration: str = Form(...),
     audio_file: UploadFile = File(...),
-    cover_art: Optional[UploadFile] = File(None)
+    cover_art: Optional[UploadFile] = File(None),
+    lyrics_lrc: Optional[str] = Form(None) # ✅ Nuevo parámetro para las letras LRC
 ):
     """Sube un archivo de audio y su portada, y lo guarda en la base de datos."""
 
     audio_filename = Path(audio_file.filename).name
-    cover_filename = None
-    if cover_art:
-        cover_filename = Path(cover_art.filename).name
+    cover_filename = Path(cover_art.filename).name if cover_art else None
 
     new_track = Track(
         title=title,
@@ -329,7 +289,8 @@ async def upload_track(
         album=album,
         duration=duration,
         audio_url=f"/audio/{audio_filename}", 
-        artwork_url=f"/cover_art/{cover_filename}" if cover_filename else None 
+        artwork_url=f"/cover_art/{cover_filename}" if cover_filename else None,
+        lyrics_lrc=lyrics_lrc # ✅ Guardar las letras en el modelo Track
     )
     
     db.add(new_track)
@@ -341,6 +302,35 @@ async def upload_track(
         "track_id": new_track.id,
         "title": new_track.title
     }
+
+# ✅ NUEVO ENDPOINT: Actualizar una canción existente (incluyendo lyrics_lrc)
+@app.patch("/api/tracks/{track_id}", response_model=TrackBase) # Retorna el Track actualizado
+async def update_track(
+    track_id: int,
+    track_update: TrackUpdate, # Usa el nuevo esquema TrackUpdate
+    db: AsyncSession = Depends(get_db)
+):
+    """Actualiza campos de una canción existente, incluyendo lyrics_lrc."""
+    result = await db.execute(select(Track).filter(Track.id == track_id))
+    track = result.scalars().first()
+
+    if not track:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Canción no encontrada")
+
+    update_data = track_update.model_dump(exclude_unset=True) # Obtiene solo los campos que fueron enviados
+
+    for key, value in update_data.items():
+        setattr(track, key, value) # Actualiza cada atributo del modelo Track
+
+    try:
+        await db.commit()
+        await db.refresh(track) # Refresca el objeto para que Pydantic lo mapee correctamente
+    except exc.IntegrityError as e:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Error al actualizar la canción: {e}")
+
+    return track
+
 
 @app.put("/api/playlists/{playlist_id}/reorder", response_model=PlaylistResponse)
 async def reorder_playlist_tracks(
