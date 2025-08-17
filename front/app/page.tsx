@@ -43,14 +43,16 @@ export default function Home() {
   const [initialLoad, setInitialLoad] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Definir la URL base de la API usando la variable de entorno
+  // Asegúrate de que NEXT_PUBLIC_API_BASE esté correctamente configurada en Render (y en .env.local para desarrollo)
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000'; // Fallback para desarrollo
+
   const fetchInitialData = useCallback(async () => {
     setIsLoading(true);
-    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-    const apiBaseUrl = `http://${host}:8000`;
 
     try {
       // 1. Fetch de todas las canciones (o una cantidad grande para "Explorar")
-      const tracksResponse = await fetch(`${apiBaseUrl}/api/tracks?limit=100`, { 
+      const tracksResponse = await fetch(`${API_BASE_URL}/api/tracks?limit=100`, { 
         headers: { 'Accept': 'application/json' },
       });
       if (!tracksResponse.ok) {
@@ -61,7 +63,7 @@ export default function Home() {
       setHasMore(pagedTracksData.items.length === 100); 
 
       // 2. Fetch de playlists
-      const playlistsResponse = await fetch(`${apiBaseUrl}/api/playlists`, {
+      const playlistsResponse = await fetch(`${API_BASE_URL}/api/playlists`, {
         headers: { 'Accept': 'application/json' },
       });
       if (!playlistsResponse.ok) {
@@ -73,21 +75,20 @@ export default function Home() {
     } catch (error) {
       console.error("Error fetching initial data:", error);
       toast.error("Error al cargar el contenido inicial.", {
-        description: "Intenta recargar la página.",
+        description: "Verifica la conexión con el backend.",
         duration: 5000,
       });
     } finally {
       setIsLoading(false);
       setInitialLoad(false);
     }
-  }, []);
+  }, [API_BASE_URL]);
 
   // Función para cargar más canciones si el usuario hace scroll, solo si no hay término de búsqueda activo
   const fetchMoreTracks = useCallback(async (page: number) => {
     setIsLoading(true);
     const offset = page * PAGE_SIZE;
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${window.location.hostname}:8000`;
-    const url = `${apiBaseUrl}/api/tracks?limit=${PAGE_SIZE}&offset=${offset}`;
+    const url = `${API_BASE_URL}/api/tracks?limit=${PAGE_SIZE}&offset=${offset}`;
 
     try {
       const response = await fetch(url, {
@@ -108,14 +109,14 @@ export default function Home() {
     } catch (error) {
       console.error("Error fetching more tracks:", error);
       toast.error("Error al cargar más canciones.", {
-        description: "Intenta recargar la página.",
+        description: "Verifica la conexión con el backend.",
         duration: 5000,
       });
       setHasMore(false);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [API_BASE_URL]);
 
 
   useEffect(() => {
@@ -253,12 +254,12 @@ export default function Home() {
                 ))}
               </div>
               {playlists.length > 5 && (
-                 <div className="flex justify-end">
-                    <Link href="/library" passHref>
-                        <Button variant="ghost" className="text-black hover:underline">Ver todas las playlists</Button>
-                    </Link>
-                 </div>
-              )}
+                   <div className="flex justify-end">
+                     <Link href="/library" passHref>
+                         <Button variant="ghost" className="text-black hover:underline">Ver todas las playlists</Button>
+                     </Link>
+                   </div>
+               )}
             </section>
           )}
 
