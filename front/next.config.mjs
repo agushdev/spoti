@@ -16,7 +16,7 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   env: {
-    NEXT_PUBLIC_API_BASE: "https://spoti-jcik.onrender.com/api",
+    NEXT_PUBLIC_API_BASE: "https://spoti-backend.onrender.com/api",
   },
   images: {
     unoptimized: true,

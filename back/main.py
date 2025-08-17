@@ -10,10 +10,10 @@ from typing import List, Optional
 from pathlib import Path # Importar Path para manejo robusto de rutas de archivo
 
 # Importa los modelos de la base de datos
-from .database import engine, Base, get_db
-from back.models import Playlist, Track 
+from database import engine, Base, get_db
+from models import Playlist, Track 
 # ✅ Importa todos los esquemas necesarios, incluyendo PlaylistUpdate, ReorderTracksRequest y TrackUpdate
-from back.schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse, ReorderTracksRequest, PlaylistUpdate, TrackUpdate 
+from schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse, ReorderTracksRequest, PlaylistUpdate, TrackUpdate 
 
 app = FastAPI(
     title="Spoti Backend"
