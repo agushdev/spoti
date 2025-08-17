@@ -32,13 +32,17 @@ export default function BibliotecaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
+  // Define la URL base de la API usando la variable de entorno
+  // Esta variable debe estar configurada en Render para el frontend
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000'; // Fallback para desarrollo
+
   useEffect(() => {
     async function fetchPlaylists() {
       try {
-        const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-        const apiUrl = `http://${host}:8000/api/playlists`;
-        console.log("Fetching playlists from:", apiUrl);
-        
+        // Usa la variable de entorno para construir la URL
+        const apiUrl = `${API_BASE_URL}/api/playlists`;
+        console.log("Fetching playlists from:", apiUrl); // Puedes dejar este log temporalmente para verificar la URL
+
         const response = await fetch(apiUrl);
         
         if (!response.ok) {
@@ -65,7 +69,7 @@ export default function BibliotecaPage() {
       }
     }
     fetchPlaylists();
-  }, [toast]);
+  }, [API_BASE_URL, toast]); // Añade API_BASE_URL a las dependencias
 
   if (isLoading) {
     return <div className="p-10 text-center text-neutral-500">Cargando tu biblioteca...</div>;

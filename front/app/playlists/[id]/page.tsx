@@ -110,12 +110,9 @@ export default function PlaylistDetailPage({ params }: PlaylistDetailPageProps) 
   const router = useRouter();
   const { play, shuffleMode, toggleShuffle, current: currentTrack, isPlaying, toggle: pause } = usePlayer();
 
-  // ✅ SOLUCIÓN CORREGIDA PARA PARAMS:
-  // params.id ya es una string, simplemente la parseamos y memoizamos.
-  // No necesitamos React.use() aquí.
-  const playlistId = useMemo(() => {
-    return parseInt(params.id, 10);
-  }, [params.id]); // params.id es la única dependencia
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+
+  const playlistId = parseInt(params.id, 10);
 
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -200,9 +197,7 @@ export default function PlaylistDetailPage({ params }: PlaylistDetailPageProps) 
     }
 
     try {
-      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${host}:8000`;
-      const response = await fetch(`${apiBaseUrl}/api/playlists/${playlistId}`);
+      const response = await fetch(`${API_BASE_URL}/api/playlists/${playlistId}`);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -213,9 +208,6 @@ export default function PlaylistDetailPage({ params }: PlaylistDetailPageProps) 
         const data: Playlist = await response.json();
         let sortedTracks = [...data.tracks]; // Copia para no mutar el original
 
-        // ✅ LÓGICA DE ORDENAMIENTO PARA NUEVAS CANCIONES:
-        // Si NO estamos reordenando, ordena por fecha de adición.
-        // Esto asegura que las nuevas canciones (con added_at más reciente) vayan al final.
         if (!isReordering) {
           sortedTracks.sort((a, b) => {
             // Convertir las cadenas de fecha a objetos Date para una comparación fiable
@@ -224,8 +216,6 @@ export default function PlaylistDetailPage({ params }: PlaylistDetailPageProps) 
             return dateA - dateB; // Orden ascendente por fecha
           });
         }
-        // Si isReordering es true, se respeta el orden actual de `data.tracks`
-        // (que debería ser el orden arrastrado guardado en el backend o el último conocido)
 
         setPlaylist({ ...data, tracks: sortedTracks });
         setInitialPlaylistTracks(sortedTracks); // Guarda el orden inicial para "Cancelar"
@@ -237,7 +227,7 @@ export default function PlaylistDetailPage({ params }: PlaylistDetailPageProps) 
     } finally {
       setIsLoading(false);
     }
-  }, [playlistId, isReordering]); // Dependencias
+  }, [playlistId, isReordering, API_BASE_URL, toast]); // Dependencias
 
   useEffect(() => {
     if (!isNaN(playlistId)) {
@@ -249,15 +239,13 @@ export default function PlaylistDetailPage({ params }: PlaylistDetailPageProps) 
     if (!playlist) return;
 
     try {
-        const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${host}:8000`;
-        const response = await fetch(`${apiBaseUrl}/api/playlists/${playlist.id}`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ artwork_url: newImageUrl }),
-        });
+        const response = await fetch(`${API_BASE_URL}/api/playlists/${playlist.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ artwork_url: newImageUrl }),
+      });
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -271,14 +259,12 @@ export default function PlaylistDetailPage({ params }: PlaylistDetailPageProps) 
         console.error("Error de conexión al actualizar carátula:", error);
         toast.error("Error de red", { description: error.message || "No se pudo conectar con el servidor para actualizar la imagen." });
     }
-  }, [playlist, fetchPlaylistDetails]);
+  }, [playlist, fetchPlaylistDetails, API_BASE_URL, toast]);
 
   const handleRemoveTrack = useCallback(async (trackToRemoveId: number) => {
     if (!playlist) return;
     try {
-      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${host}:8000`;
-      const response = await fetch(`${apiBaseUrl}/api/playlists/${playlist.id}/tracks/${trackToRemoveId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/playlists/${playlist.id}/tracks/${trackToRemoveId}`, {
         method: 'DELETE',
       });
       if (!response.ok) {
@@ -293,14 +279,12 @@ export default function PlaylistDetailPage({ params }: PlaylistDetailPageProps) 
       console.error("Error al eliminar pista:", error);
       toast.error("Hubo un error al eliminar la canción.");
     }
-  }, [playlist, fetchPlaylistDetails]);
+  }, [playlist, fetchPlaylistDetails, API_BASE_URL, toast]);
 
   const handleDeletePlaylist = useCallback(async () => {
     if (!playlist) return;
     try {
-      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${host}:8000`;
-      const response = await fetch(`${apiBaseUrl}/api/playlists/${playlist.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/playlists/${playlist.id}`, {
         method: 'DELETE',
       });
       if (!response.ok) {
@@ -315,7 +299,7 @@ export default function PlaylistDetailPage({ params }: PlaylistDetailPageProps) 
       console.error("Error al eliminar playlist:", error);
       toast.error("Hubo un error al eliminar la playlist.");
     }
-  }, [playlist, router]);
+  }, [playlist, router, API_BASE_URL, toast]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id);
@@ -360,9 +344,7 @@ export default function PlaylistDetailPage({ params }: PlaylistDetailPageProps) 
   const handleReorderSave = useCallback(async () => {
     if (!playlist) return;
     try {
-      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${host}:8000`;
-      const response = await fetch(`${apiBaseUrl}/api/playlists/${playlist.id}/reorder`, {
+      const response = await fetch(`${API_BASE_URL}/api/playlists/${playlist.id}/reorder`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -382,7 +364,7 @@ export default function PlaylistDetailPage({ params }: PlaylistDetailPageProps) 
       console.error("Error al guardar el nuevo orden:", error);
       toast.error("Hubo un error al guardar el nuevo orden.");
     }
-  }, [playlist]);
+  }, [playlist, API_BASE_URL, toast]);
 
   const handleReorderCancel = useCallback(() => {
     if (initialPlaylistTracks && playlist) {
