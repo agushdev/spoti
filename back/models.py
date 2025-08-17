@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Table
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from typing import List, Optional
 
-from .database import Base
+from database import Base
 
 # Tabla de asociación para la relación muchos a muchos entre playlists y tracks
 playlist_tracks = Table(

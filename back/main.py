@@ -7,12 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
-from pathlib import Path # Importar Path para manejo robusto de rutas de archivo
-
-# Importa los modelos de la base de datos
+from pathlib import Path 
 from database import engine, Base, get_db
 from models import Playlist, Track 
-# ✅ Importa todos los esquemas necesarios, incluyendo PlaylistUpdate, ReorderTracksRequest y TrackUpdate
 from schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse, ReorderTracksRequest, PlaylistUpdate, TrackUpdate 
 
 app = FastAPI(
