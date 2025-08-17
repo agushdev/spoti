@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # URL de conexión a la base de datos PostgreSQL
-DATABASE_URL = "postgresql://spoti_db_user:JDVnm8s8b9JnZ6N0JVXNWs3tUyowGVmI@dpg-d2gon6odl3ps73fhr5v0-a/spoti_db" 
+DATABASE_URL = "postgresql+asyncpg://spoti_db_user:JDVnm8s8b9JnZ6N0JVXNWs3tUyowGVmI@dpg-d2gon6odl3ps73fhr5v0-a/spoti_db" 
 
 # Crea el motor de base de datos asíncrono
 engine = create_async_engine(DATABASE_URL)
