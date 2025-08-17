@@ -8,14 +8,14 @@ import { useEffect, useState, useCallback } from "react";
 import { Button } from "./ui/button";
 import { AddPlaylistDialog } from "./add-playlist-dialog";
 import { toast } from 'sonner';
-import Image from "next/image"; 
+import Image from "next/image";
 
 // Define el tipo Playlist para lo que esperamos del backend
 type Playlist = {
   id: number;
   name: string;
-  tracks: any[]; 
-  artwork_url?: string | null; 
+  tracks: any[];
+  artwork_url?: string | null;
 };
 
 export function NavSidebar() {
@@ -24,12 +24,18 @@ export function NavSidebar() {
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(true);
   const [isAddPlaylistDialogOpen, setIsAddPlaylistDialogOpen] = useState(false);
 
+  // Define la URL base de la API usando la variable de entorno
+  // Asegúrate de que NEXT_PUBLIC_API_BASE esté configurada en Render (y en .env.local para desarrollo)
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000'; // Fallback para desarrollo
+
   const fetchPlaylists = useCallback(async () => {
     setIsLoadingPlaylists(true);
     try {
-      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      const response = await fetch(`http://${host}:8000/api/playlists`);
+      // ✅ MODIFICACIÓN: Usar API_BASE_URL para la llamada fetch
+      const response = await fetch(`${API_BASE_URL}/api/playlists`);
       if (!response.ok) {
+        const errorBody = await response.text(); // Captura el cuerpo del error para depuración
+        console.error(`Error al cargar las playlists: Estado ${response.status}, Cuerpo: ${errorBody}`);
         throw new Error("Error al cargar las playlists.");
       }
       const data: Playlist[] = await response.json();
@@ -40,18 +46,17 @@ export function NavSidebar() {
     } finally {
       setIsLoadingPlaylists(false);
     }
-  }, []);
+  }, [API_BASE_URL]); // ✅ Añadir API_BASE_URL a las dependencias de useCallback
 
   useEffect(() => {
     fetchPlaylists();
   }, [fetchPlaylists]);
 
   const handlePlaylistCreated = () => {
-    fetchPlaylists(); 
+    fetchPlaylists();
   };
 
-  // ✅ Placeholder ahora es 48x48 para coincidir con el nuevo tamaño de imagen
-  const defaultPlaceholderUrl = "https://placehold.co/48x48/cccccc/444444?text=PL"; 
+  const defaultPlaceholderUrl = "https://placehold.co/48x48/cccccc/444444?text=PL";
 
   return (
     <nav className="flex flex-col gap-2 p-4 pt-0 text-sm font-medium">
@@ -95,9 +100,9 @@ export function NavSidebar() {
       {/* Sección de Playlists Rápidas */}
       <div className="flex justify-between items-center px-4">
         <h3 className="font-semibold text-neutral-800">Tu biblioteca</h3>
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           className="rounded-full hover:bg-neutral-100 text-neutral-500"
           onClick={() => setIsAddPlaylistDialogOpen(true)}
           aria-label="Crear nueva playlist"
@@ -128,7 +133,7 @@ export function NavSidebar() {
                   "flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-neutral-100 transition-colors truncate",
                   pathname === `/playlists/${playlist.id}` ? "bg-neutral-100 text-black" : "text-neutral-600"
                 )}
-                title={playlist.name} 
+                title={playlist.name}
               >
                 {/* ✅ Imagen de la carátula - Aumentado el tamaño a size-12 (48px) */}
                 <div className="relative size-12 flex-shrink-0 rounded-md overflow-hidden bg-neutral-200">
@@ -143,7 +148,7 @@ export function NavSidebar() {
                     }}
                   />
                 </div>
-                <span className="truncate">{playlist.name}</span> 
+                <span className="truncate">{playlist.name}</span>
               </Link>
             );
           })
@@ -151,8 +156,8 @@ export function NavSidebar() {
       </div>
 
       {/* Diálogo para crear nueva playlist (asegúrate de que este componente exista) */}
-      <AddPlaylistDialog 
-        open={isAddPlaylistDialogOpen} 
+      <AddPlaylistDialog
+        open={isAddPlaylistDialogOpen}
         onOpenChange={setIsAddPlaylistDialogOpen}
         onPlaylistCreated={handlePlaylistCreated}
       />

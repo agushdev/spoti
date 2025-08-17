@@ -18,8 +18,8 @@ app = FastAPI(
 
 # Configuración de CORS
 origins = [
-    "http://localhost:3000",
-    "https://spoti-front.onrender.com"
+    "https://spoti-front.onrender.com",
+    "http://localhost:3000"
 ]
 app.add_middleware(
     CORSMiddleware,
