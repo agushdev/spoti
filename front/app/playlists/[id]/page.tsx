@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { TrackRow } from "@/components/track-row"; 
+import { TrackRow } from "@/components/track-row";
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronLeft, Plus, Edit, Trash2, PlayCircle, Shuffle, MoreHorizontal, Search, PauseCircle, GripVertical, Check, Image as ImageIcon } from 'lucide-react'; 
+import { ChevronLeft, Plus, Edit, Trash2, PlayCircle, Shuffle, MoreHorizontal, Search, PauseCircle, GripVertical, Check, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { AddTrackToPlaylistDialog } from '@/components/add-track-to-playlist-dialog'; 
-import { EditPlaylistNameDialog } from '@/components/edit-playlist-name-dialog'; 
-import { DeletePlaylistDialog } from '@/components/delete-playlist-dialog'; 
+import { AddTrackToPlaylistDialog } from '@/components/add-track-to-playlist-dialog';
+import { EditPlaylistNameDialog } from '@/components/edit-playlist-name-dialog';
+import { DeletePlaylistDialog } from '@/components/delete-playlist-dialog';
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -41,16 +41,18 @@ import {
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { SortableTrack } from '@/components/sortable-track';
 import { toast } from 'sonner';
-import { EditPlaylistImageDialog } from '@/components/edit-playlist-image-dialog'; 
+import { EditPlaylistImageDialog } from '@/components/edit-playlist-image-dialog';
+// Ya no necesitamos importar React solo para React.use si no lo usas para otra cosa aquí.
 
+// Tipos de datos (asegúrate de que coincidan con tu backend)
 type Track = {
   id: number;
   title: string;
   artist: string;
   album: string;
-  duration: string;
+  duration: string; // Formato "MM:SS"
   artwork_url: string | null;
-  added_at: string;
+  added_at: string; // Por ejemplo, un timestamp ISO "YYYY-MM-DDTHH:mm:ss.sssZ"
   audio_url: string;
 };
 
@@ -61,30 +63,59 @@ type Playlist = {
   artwork_url?: string | null;
 };
 
+// Función de utilidad para formatear la duración
 function formatDuration(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = Math.floor(totalSeconds % 60);
+  const formattedMinutes = minutes.toString().padStart(2, '0');
+  const formattedSeconds = remainingSeconds.toString().padStart(2, '0');
+
   if (hours > 0) {
-    return `${hours} hr ${minutes} min`;
+    return `${hours} hr ${formattedMinutes} min`;
   }
-  return `${minutes} min`;
+  return `${formattedMinutes}:${formattedSeconds}`;
 }
 
+// Función de utilidad para parsear la duración de "MM:SS" a segundos
 function parseDuration(durationStr: string): number {
-  const [minutes, seconds] = durationStr.split(':').map(Number);
-  return minutes * 60 + seconds;
+  if (!durationStr || typeof durationStr !== 'string') {
+    console.warn("Invalid duration string:", durationStr);
+    return 0;
+  }
+  const parts = durationStr.split(':');
+  if (parts.length === 2) {
+    const minutes = parseInt(parts[0], 10);
+    const seconds = parseInt(parts[1], 10);
+    if (!isNaN(minutes) && !isNaN(seconds)) {
+      return minutes * 60 + seconds;
+    }
+  } else if (parts.length === 3) {
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    const seconds = parseInt(parts[2], 10);
+    if (!isNaN(hours) && !isNaN(minutes) && !isNaN(seconds)) {
+      return hours * 3600 + minutes * 60 + seconds;
+    }
+  }
+  console.error(`Formato de duración inesperado: ${durationStr}. Esperado "MM:SS" o "HH:MM:SS".`);
+  return 0;
 }
 
-export default function PlaylistDetailPage({ params }: { params: { id: string } }) {
+interface PlaylistDetailPageProps {
+  params: { id: string };
+}
+
+export default function PlaylistDetailPage({ params }: PlaylistDetailPageProps) {
   const router = useRouter();
   const { play, shuffleMode, toggleShuffle, current: currentTrack, isPlaying, toggle: pause } = usePlayer();
 
-  // ✅ MODIFICACIÓN CLAVE: Usar useMemo para parsear el ID una sola vez
-  // Esto asegura que playlistId sea una dependencia estable y ayuda a Next.js a no emitir la advertencia.
+  // ✅ SOLUCIÓN CORREGIDA PARA PARAMS:
+  // params.id ya es una string, simplemente la parseamos y memoizamos.
+  // No necesitamos React.use() aquí.
   const playlistId = useMemo(() => {
     return parseInt(params.id, 10);
-  }, [params.id]); // params.id es la única dependencia para esta memoización
-
+  }, [params.id]); // params.id es la única dependencia
 
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -161,17 +192,18 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
   }, [scrollDirection]);
 
   const fetchPlaylistDetails = useCallback(async () => {
-    // Aquí ya usamos el playlistId que fue memoizado
-    if (isNaN(playlistId)) { 
-        console.error("ID de Playlist inválido:", playlistId); // Usar playlistId directamente
-        setIsLoading(false);
-        setPlaylist(null);
-        return;
+    if (isNaN(playlistId)) {
+      console.error("ID de Playlist inválido:", playlistId);
+      setIsLoading(false);
+      setPlaylist(null);
+      return;
     }
 
     try {
       const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      const response = await fetch(`http://${host}:8000/api/playlists/${playlistId}`);
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${host}:8000`;
+      const response = await fetch(`${apiBaseUrl}/api/playlists/${playlistId}`);
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`Error HTTP! Estado: ${response.status}, Cuerpo: ${errorText}`);
@@ -179,8 +211,24 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
         toast.error("Error al cargar playlist", { description: `No se pudo cargar la playlist. Estado: ${response.status}.` });
       } else {
         const data: Playlist = await response.json();
-        setPlaylist(data);
-        setInitialPlaylistTracks(data.tracks);
+        let sortedTracks = [...data.tracks]; // Copia para no mutar el original
+
+        // ✅ LÓGICA DE ORDENAMIENTO PARA NUEVAS CANCIONES:
+        // Si NO estamos reordenando, ordena por fecha de adición.
+        // Esto asegura que las nuevas canciones (con added_at más reciente) vayan al final.
+        if (!isReordering) {
+          sortedTracks.sort((a, b) => {
+            // Convertir las cadenas de fecha a objetos Date para una comparación fiable
+            const dateA = new Date(a.added_at).getTime();
+            const dateB = new Date(b.added_at).getTime();
+            return dateA - dateB; // Orden ascendente por fecha
+          });
+        }
+        // Si isReordering es true, se respeta el orden actual de `data.tracks`
+        // (que debería ser el orden arrastrado guardado en el backend o el último conocido)
+
+        setPlaylist({ ...data, tracks: sortedTracks });
+        setInitialPlaylistTracks(sortedTracks); // Guarda el orden inicial para "Cancelar"
       }
     } catch (error) {
       console.error("Error al obtener detalles de la playlist:", error);
@@ -189,13 +237,11 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
     } finally {
       setIsLoading(false);
     }
-  // ✅ MODIFICACIÓN CLAVE: La dependencia ahora es solo playlistId (el valor memoizado)
-  }, [playlistId]); 
+  }, [playlistId, isReordering]); // Dependencias
 
   useEffect(() => {
-    // Si playlistId es un número válido, entonces llama a fetchPlaylistDetails
     if (!isNaN(playlistId)) {
-        fetchPlaylistDetails();
+      fetchPlaylistDetails();
     }
   }, [fetchPlaylistDetails, playlistId]);
 
@@ -203,7 +249,8 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
     if (!playlist) return;
 
     try {
-        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${window.location.hostname}:8000`;
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${host}:8000`;
         const response = await fetch(`${apiBaseUrl}/api/playlists/${playlist.id}`, {
             method: 'PATCH',
             headers: {
@@ -226,12 +273,12 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
     }
   }, [playlist, fetchPlaylistDetails]);
 
-
   const handleRemoveTrack = useCallback(async (trackToRemoveId: number) => {
     if (!playlist) return;
     try {
       const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      const response = await fetch(`http://${host}:8000/api/playlists/${playlist.id}/tracks/${trackToRemoveId}`, {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${host}:8000`;
+      const response = await fetch(`${apiBaseUrl}/api/playlists/${playlist.id}/tracks/${trackToRemoveId}`, {
         method: 'DELETE',
       });
       if (!response.ok) {
@@ -252,7 +299,8 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
     if (!playlist) return;
     try {
       const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      const response = await fetch(`http://${host}:8000/api/playlists/${playlist.id}`, {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${host}:8000`;
+      const response = await fetch(`${apiBaseUrl}/api/playlists/${playlist.id}`, {
         method: 'DELETE',
       });
       if (!response.ok) {
@@ -313,7 +361,8 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
     if (!playlist) return;
     try {
       const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      const response = await fetch(`http://${host}:8000/api/playlists/${playlist.id}/reorder`, {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${host}:8000`;
+      const response = await fetch(`${apiBaseUrl}/api/playlists/${playlist.id}/reorder`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -372,7 +421,6 @@ export default function PlaylistDetailPage({ params }: { params: { id: string } 
   if (playlist?.artwork_url && !playlist.artwork_url.startsWith('http') && !playlist.artwork_url.startsWith('/')) {
     playlistImage = `/cover_art/${playlist.artwork_url}`;
   }
-
 
   const handlePlayPause = () => {
     if (!playlist || playlist.tracks.length === 0) return;

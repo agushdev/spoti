@@ -8,48 +8,6 @@ import { Pause, Play, SkipBack, SkipForward, Volume2, Heart, Shuffle, Repeat, Re
 import Image from "next/image";
 import { useEffect, useState, useRef, useCallback } from "react";
 
-type Track = {
-  id: number;
-  title: string;
-  artist: string;
-  album: string;
-  duration: string;
-  artwork_url: string | null;
-  audio_url: string;
-  lyrics_lrc?: string | null;
-};
-
-type LyricLine = {
-  time: number;
-  text: string;
-};
-
-function parseLRC(lrcContent: string): LyricLine[] {
-  const lines = lrcContent.trim().split('\n');
-  const parsedLyrics: LyricLine[] = [];
-
-  lines.forEach(line => {
-    const timeMatch = line.match(/^\[(\d{2}):(\d{2})\.(\d{2,3})\]/);
-    if (timeMatch) {
-      const minutes = parseInt(timeMatch[1], 10);
-      const seconds = parseInt(timeMatch[2], 10);
-      const milliseconds = parseInt(timeMatch[3].padEnd(3, '0'), 10);
-      const timeInSeconds = minutes * 60 + seconds + milliseconds / 1000;
-      
-      let text = line.substring(timeMatch[0].length).trim();
-      text = text.replace(/\[(\d{2}):(\d{2})\.(\d{2,3})\]/g, '').trim();
-      text = text.replace(/\s+/g, ' ').trim();
-      
-      if (text && !parsedLyrics.some(lyric => lyric.text === text && lyric.time === timeInSeconds)) {
-        parsedLyrics.push({ time: timeInSeconds, text });
-      }
-    }
-  });
-
-  parsedLyrics.sort((a, b) => a.time - b.time);
-  return parsedLyrics;
-}
-
 function formatTime(s: number) {
   if (!Number.isFinite(s)) return "0:00";
   const m = Math.floor(s / 60);
@@ -75,15 +33,11 @@ export function DesktopPlayerControls() {
     loopMode,
     toggleShuffle,
     toggleLoop,
+    toggleLyricsPanel, // ¡Importante! Aquí se importa la función para el panel de letras
+    showLyricsPanel, // Para saber si el botón debe estar activo
   } = usePlayer();
 
   const vol = Math.round(volume * 100);
-  const [lyrics, setLyrics] = useState<LyricLine[]>([]);
-  const [activeLyricIndex, setActiveLyricIndex] = useState(-1);
-  const [showLyrics, setShowLyrics] = useState(false);
-  const lyricsContainerRef = useRef<HTMLDivElement>(null);
-  const activeLyricRef = useRef<HTMLParagraphElement>(null);
-  const [isUserScrolling, setIsUserScrolling] = useState(false);
 
   const defaultPlayerCoverUrl = "https://placehold.co/64x64/E0E0E0/A0A0A0?text=No+Cover";
   let playerCoverSource: string;
@@ -97,76 +51,6 @@ export function DesktopPlayerControls() {
   } else {
     playerCoverSource = defaultPlayerCoverUrl;
   }
-
-  useEffect(() => {
-    if (current?.lyrics_lrc) {
-      const unescapedLrc = current.lyrics_lrc.replace(/\\n/g, '\n');
-      setLyrics(parseLRC(unescapedLrc));
-      setActiveLyricIndex(-1);
-    } else {
-      setLyrics([]);
-      setActiveLyricIndex(-1);
-    }
-  }, [current?.lyrics_lrc]);
-
-  const handleScroll = useCallback(() => {
-    setIsUserScrolling(true);
-  }, []);
-
-  useEffect(() => {
-    const container = lyricsContainerRef.current;
-    if (container) {
-      container.addEventListener('scroll', handleScroll);
-      container.addEventListener('touchmove', handleScroll);
-      return () => {
-        container.removeEventListener('scroll', handleScroll);
-        container.removeEventListener('touchmove', handleScroll);
-      };
-    }
-  }, [handleScroll]);
-
-  useEffect(() => {
-    if (lyrics.length === 0 || !isPlaying || isUserScrolling) return;
-
-    let newActiveIndex = -1;
-    for (let i = 0; i < lyrics.length; i++) {
-      if (progress >= lyrics[i].time) {
-        newActiveIndex = i;
-      } else {
-        break;
-      }
-    }
-    setActiveLyricIndex(newActiveIndex);
-
-    if (activeLyricRef.current && lyricsContainerRef.current) {
-      const container = lyricsContainerRef.current;
-      const activeLine = activeLyricRef.current;
-      const containerHeight = container.clientHeight;
-      const lineHeight = activeLine.offsetHeight;
-      const lineOffsetTop = activeLine.offsetTop;
-      const scrollTop = container.scrollTop;
-      const scrollBottom = scrollTop + containerHeight;
-
-      const isActiveLyricVisible = lineOffsetTop >= scrollTop && lineOffsetTop + lineHeight <= scrollBottom;
-      if (!isActiveLyricVisible) {
-        const desiredScrollTop = lineOffsetTop - (containerHeight / 2) + (lineHeight / 2);
-        container.scrollTo({
-          top: desiredScrollTop,
-          behavior: 'smooth'
-        });
-      }
-    }
-  }, [progress, lyrics, isPlaying, isUserScrolling]);
-
-  const handleLyricClick = useCallback((time: number) => {
-    seek(time);
-    setIsUserScrolling(false);
-  }, [seek]);
-
-  const handleToggleLyrics = useCallback(() => {
-    setShowLyrics(prev => !prev);
-    setIsUserScrolling(false);
-  }, []);
 
   if (!current) {
     return (
@@ -290,13 +174,17 @@ export function DesktopPlayerControls() {
             />
             <span className="text-xs text-neutral-500 tabular-nums w-8 text-right">{vol}</span>
           </div>
-          {lyrics.length > 0 && (
+          {/* Botón de Letras - ¡Ahora toggles showLyricsPanel! */}
+          {current?.lyrics_lrc && ( // Solo muestra el botón si hay letras
             <Button
               variant="ghost"
               size="icon"
-              onClick={handleToggleLyrics}
-              className={cn("rounded-full hover:bg-neutral-100", showLyrics ? "text-black" : "text-neutral-500")}
-              aria-label={showLyrics ? "Ocultar letras" : "Mostrar letras"}
+              onClick={toggleLyricsPanel} // ✅ Llama a la nueva función
+              className={cn(
+                "rounded-full hover:bg-neutral-100",
+                showLyricsPanel ? "text-black" : "text-neutral-500" // Activo si el panel está abierto
+              )}
+              aria-label="Mostrar/ocultar letras"
             >
               <Music className="size-5" />
             </Button>
@@ -314,49 +202,6 @@ export function DesktopPlayerControls() {
           <span className="text-xs text-neutral-500 tabular-nums">{formatTime(duration)}</span>
         </div>
       </div>
-
-      {/* Right Section: Lyrics */}
-      {showLyrics && lyrics.length > 0 && (
-        <div
-          ref={lyricsContainerRef}
-          className="hidden md:flex flex-col items-center flex-none w-[200px] lg:w-[250px] xl:w-[300px] h-[150px] overflow-y-auto custom-lrc-scrollbar"
-        >
-          <div className="w-full flex flex-col items-center">
-            {lyrics.map((line, index) => (
-              <p
-                key={index}
-                ref={index === activeLyricIndex ? activeLyricRef : null}
-                className={cn(
-                  "text-sm font-medium my-2 px-2 transition-all duration-300 ease-in-out",
-                  "whitespace-normal break-words cursor-pointer",
-                  index === activeLyricIndex ? "text-black font-semibold" : "text-neutral-500 hover:text-neutral-700"
-                )}
-                onClick={() => handleLyricClick(line.time)}
-              >
-                {line.text}
-              </p>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <style jsx global>{`
-        .custom-lrc-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-lrc-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-          border-radius: 10px;
-        }
-        .custom-lrc-scrollbar::-webkit-scrollbar-thumb {
-          background-color: rgba(0,0,0,0.3);
-          border-radius: 10px;
-          border: 1px solid rgba(0,0,0,0.1);
-        }
-        .custom-lrc-scrollbar::-webkit-scrollbar-thumb:hover {
-          background-color: rgba(0,0,0,0.5);
-        }
-      `}</style>
     </div>
   );
 }

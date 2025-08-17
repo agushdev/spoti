@@ -77,9 +77,11 @@ export function FullScreenPlayer() {
     loopMode,
     toggleShuffle,
     toggleLoop,
-    isPlayerExpanded,
-    togglePlayerExpansion,
+    showPlayerExpansion, 
+    setPlayerExpansion, 
   } = usePlayer();
+
+  const isPlayerExpanded = showPlayerExpansion; 
 
   const vol = Math.round(volume * 100);
 
@@ -187,7 +189,7 @@ export function FullScreenPlayer() {
   }
 
   return (
-    <DialogRoot open={isPlayerExpanded} onOpenChange={togglePlayerExpansion}>
+    <DialogRoot open={isPlayerExpanded} onOpenChange={setPlayerExpansion}>
       <DialogContent 
         className={cn(
           "fixed inset-0 w-screen h-screen p-0 m-0",
@@ -208,7 +210,7 @@ export function FullScreenPlayer() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={togglePlayerExpansion}
+          onClick={() => setPlayerExpansion(false)} 
           className="absolute top-4 right-4 z-20 rounded-full text-white hover:bg-white/20"
           aria-label="Cerrar reproductor"
         >
@@ -232,12 +234,12 @@ export function FullScreenPlayer() {
             <div className="relative w-full max-w-[calc(100vw-4rem)] sm:max-w-lg aspect-square rounded-xl overflow-hidden shadow-2xl">
               <Image
                 src={playerCoverSource}
+                width={500}
+                height={500}
                 alt={`Carátula de ${current?.album || "Desconocido"}`}
-                fill
                 sizes="(max-width: 640px) 90vw, 500px"
                 className="object-cover"
                 onError={(e) => {
-                  console.error("Full screen image failed to load:", playerCoverSource);
                   (e.target as HTMLImageElement).src = defaultCover;
                 }}
               />
