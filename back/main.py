@@ -16,17 +16,13 @@ from back.models import Playlist, Track
 from back.schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse, ReorderTracksRequest, PlaylistUpdate, TrackUpdate 
 
 app = FastAPI(
-    title="Minimalist Music Stream API",
-    description="API for a minimalist music streaming application.",
-    version="1.0.0",
+    title="Spoti Backend"
 )
 
 # Configuración de CORS
 origins = [
     "http://localhost:3000",
-    # Añade aquí la IP de tu PC si la usas directamente desde el móvil
-    # Por ejemplo: "http://192.168.0.107:3000",
-    "*" # Permite todos los orígenes para facilitar el desarrollo, ajustar en producción
+    "https://spoti-front.onrender.com"
 ]
 app.add_middleware(
     CORSMiddleware,
