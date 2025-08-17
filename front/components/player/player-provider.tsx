@@ -36,7 +36,7 @@ interface PlayerContextType {
   liked: Set<string>;
   shuffleMode: boolean;
   loopMode: "none" | "all" | "one";
-  showPlayerExpansion: boolean; 
+  showPlayerExpansion: boolean;
   showLyricsPanel: boolean;
   lyrics: LyricLine[];
   activeLyricIndex: number;
@@ -51,7 +51,7 @@ interface PlayerContextType {
   toggleLike: (trackId: string) => void;
   toggleShuffle: () => void;
   toggleLoop: () => void;
-  setPlayerExpansion: (expanded: boolean) => void; 
+  setPlayerExpansion: (expanded: boolean) => void;
   togglePlayerExpansion: () => void;
   toggleLyricsPanel: () => void;
   setLyrics: (lyrics: LyricLine[]) => void;
@@ -120,7 +120,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [liked, setLiked] = useState<Set<string>>(new Set());
   const [shuffleMode, setShuffleMode] = useState(false);
   const [loopMode, setLoopMode] = useState<"none" | "all" | "one">("none");
-  const [showPlayerExpansion, setShowPlayerExpansion] = useState(false); 
+  const [showPlayerExpansion, setShowPlayerExpansion] = useState(false);
   const [showLyricsPanel, setShowLyricsPanel] = useState(false);
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [activeLyricIndex, setActiveLyricIndex] = useState(-1);
@@ -386,26 +386,41 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Updated logic for player expansion and lyrics panel
   const setPlayerExpansion = useCallback((expanded: boolean) => {
     setShowPlayerExpansion(expanded);
-    if (!expanded && !isMobile) {
+    // If player is expanding, close lyrics panel on desktop
+    if (expanded && !isMobile) {
+      setShowLyricsPanel(false);
+    } else if (!expanded && !isMobile) {
+      // If player is collapsing on desktop, ensure lyrics panel is also closed
       setShowLyricsPanel(false);
     }
   }, [isMobile]);
 
   const togglePlayerExpansion = useCallback(() => {
-    setShowPlayerExpansion(prev => !prev);
-  }, []);
-
+    setShowPlayerExpansion(prev => {
+      // If we are about to open player expansion, close lyrics panel
+      if (!prev && !isMobile) {
+        setShowLyricsPanel(false);
+      }
+      return !prev;
+    });
+  }, [isMobile]);
 
   const toggleLyricsPanel = useCallback(() => {
-    if (!isMobile) {
+    if (!isMobile) { // Only apply this logic on desktop
+      setShowLyricsPanel(prev => {
+        // If we are about to open lyrics panel, close player expansion
+        if (!prev) {
+          setShowPlayerExpansion(false);
+        }
+        return !prev;
+      });
+    } else { // On mobile, lyrics panel should only appear within expanded player
       setShowLyricsPanel(prev => !prev);
-      if (!showLyricsPanel) {
-        setPlayerExpansion(false);
-      }
     }
-  }, [isMobile, showLyricsPanel, setPlayerExpansion]);
+  }, [isMobile]);
 
   const handleTimeUpdate = useCallback(() => {
     if (!audioRef.current) return;
@@ -555,7 +570,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     toggleShuffle,
     toggleLoop,
     togglePlayerExpansion,
-    setPlayerExpansion, 
+    setPlayerExpansion,
     toggleLyricsPanel,
     setLyrics,
     setActiveLyricIndex,
@@ -586,7 +601,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     toggleShuffle,
     toggleLoop,
     togglePlayerExpansion,
-    setPlayerExpansion, 
+    setPlayerExpansion,
     toggleLyricsPanel,
     setIsUserScrolling,
     setPlaylist,
