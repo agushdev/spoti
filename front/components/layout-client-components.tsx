@@ -23,7 +23,6 @@ export function LayoutClientComponents({ children }: { children: React.ReactNode
             "relative flex-1 overflow-y-auto bg-neutral-50 px-4 md:px-8 py-6 md:py-10 transition-all duration-300",
             {
               "hidden md:block": showPlayerExpansion && !isMobile,
-              // Reduce el ancho del contenido cuando el panel de letras está abierto
               "mr-[400px]": showLyricsPanel && !isMobile && current?.lyrics_lrc,
             }
           )}
@@ -33,16 +32,15 @@ export function LayoutClientComponents({ children }: { children: React.ReactNode
           </div>
         </main>
 
-        {/* PANEL DE LETRAS FIJO A LA DERECHA */}
+        {/* Panel de letras */}
         {showLyricsPanel && !isMobile && current?.lyrics_lrc && (
           <aside
             style={{
               width: desktopLyricsPanelWidth,
-              // ALTURA FIJA - Esta es la clave
               height: `calc(100vh - ${desktopPlayerControlsHeight})`,
             }}
             className={cn(
-              "fixed right-0 top-0 z-40", // FIJO en la pantalla
+              "fixed right-0 top-0 z-40", 
               "bg-neutral-900 border-l border-neutral-700",
               "flex flex-col",
               {

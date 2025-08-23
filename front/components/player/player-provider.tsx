@@ -386,21 +386,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // Updated logic for player expansion and lyrics panel
   const setPlayerExpansion = useCallback((expanded: boolean) => {
     setShowPlayerExpansion(expanded);
-    // If player is expanding, close lyrics panel on desktop
     if (expanded && !isMobile) {
       setShowLyricsPanel(false);
     } else if (!expanded && !isMobile) {
-      // If player is collapsing on desktop, ensure lyrics panel is also closed
       setShowLyricsPanel(false);
     }
   }, [isMobile]);
 
   const togglePlayerExpansion = useCallback(() => {
     setShowPlayerExpansion(prev => {
-      // If we are about to open player expansion, close lyrics panel
       if (!prev && !isMobile) {
         setShowLyricsPanel(false);
       }
@@ -409,15 +405,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [isMobile]);
 
   const toggleLyricsPanel = useCallback(() => {
-    if (!isMobile) { // Only apply this logic on desktop
+    if (!isMobile) { 
       setShowLyricsPanel(prev => {
-        // If we are about to open lyrics panel, close player expansion
         if (!prev) {
           setShowPlayerExpansion(false);
         }
         return !prev;
       });
-    } else { // On mobile, lyrics panel should only appear within expanded player
+    } else { 
       setShowLyricsPanel(prev => !prev);
     }
   }, [isMobile]);
@@ -470,7 +465,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const handleError = useCallback((event: Event) => {
     const audioEl = event.target as HTMLAudioElement;
     if (audioEl.error) {
-      // General error handling
+      console.error("Audio playback error:", audioEl.error);
     }
     setIsPlaying(false);
     setIsAudioReady(false);

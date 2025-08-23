@@ -10,7 +10,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"; // Usamos AlertDialog para la confirmación
+} from "@/components/ui/alert-dialog"; 
 import { Button } from "@/components/ui/button";
 
 type DeletePlaylistDialogProps = {
@@ -18,7 +18,7 @@ type DeletePlaylistDialogProps = {
   onOpenChange: (v: boolean) => void;
   playlistId: number;
   playlistName: string;
-  onPlaylistDeleted: () => void; // Callback para manejar la eliminación y la redirección
+  onPlaylistDeleted: () => void; 
 };
 
 export function DeletePlaylistDialog({
@@ -33,11 +33,10 @@ export function DeletePlaylistDialog({
   const handleDeleteConfirm = async () => {
     setIsDeleting(true);
     try {
-      await onPlaylistDeleted(); // Llama al callback de la página para la lógica de eliminación
-      onOpenChange(false); // Cierra el diálogo después de la eliminación
+      await onPlaylistDeleted(); 
+      onOpenChange(false); 
     } catch (error) {
       console.error("Failed to confirm playlist deletion:", error);
-      // El alert ya lo maneja el callback onPlaylistDeleted en page.tsx
     } finally {
       setIsDeleting(false);
     }

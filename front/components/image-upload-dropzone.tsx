@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useState, ChangeEvent } from 'react';
-import { useDropzone } from 'react-dropzone'; // Para un manejo más robusto del arrastrar y soltar
+import { useDropzone } from 'react-dropzone'; 
 import { Image as ImageIcon, XCircle, UploadCloud } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
@@ -17,12 +17,11 @@ export function ImageUploadDropzone({ currentImageUrl, onImageSelected, isLoadin
   const [preview, setPreview] = useState<string | null>(currentImageUrl || null);
   const [file, setFile] = useState<File | null>(null);
 
-  // Cuando cambia currentImageUrl externamente (ej. después de guardar en el backend), actualizamos la vista previa
   React.useEffect(() => {
     if (currentImageUrl) {
       setPreview(currentImageUrl);
-      setFile(null); // Resetea el archivo seleccionado si la URL es la "fuente de la verdad"
-    } else if (!file) { // Si no hay URL y no hay archivo, asegúrate de que no haya preview
+      setFile(null); 
+    } else if (!file) { 
       setPreview(null);
     }
   }, [currentImageUrl]);
@@ -48,14 +47,13 @@ export function ImageUploadDropzone({ currentImageUrl, onImageSelected, isLoadin
   });
 
   const handleClearImage = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Evita que el clic en X active el dropzone
+    e.stopPropagation(); 
     e.preventDefault();
     setFile(null);
     setPreview(null);
-    onImageSelected(null); // Notifica al componente padre que la imagen ha sido borrada
+    onImageSelected(null); 
   };
 
-  // Función para manejar la selección de archivo a través del botón "Seleccionar archivo"
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const selectedFile = e.target.files[0];
@@ -65,7 +63,7 @@ export function ImageUploadDropzone({ currentImageUrl, onImageSelected, isLoadin
     }
   };
 
-  const displayImage = preview || currentImageUrl; // Prioriza el preview, luego el currentImageUrl
+  const displayImage = preview || currentImageUrl;
 
   const defaultPlaceholderUrl = "https://placehold.co/200x200/cccccc/444444?text=Portada";
 
@@ -79,7 +77,7 @@ export function ImageUploadDropzone({ currentImageUrl, onImageSelected, isLoadin
           isDragActive && "border-blue-500 bg-blue-50"
         )}
       >
-        <input {...getInputProps()} onChange={handleFileChange} /> {/* También permite la selección directa */}
+        <input {...getInputProps()} onChange={handleFileChange} /> {/* Permite la selección directa */}
 
         {displayImage ? (
           <>
@@ -90,8 +88,8 @@ export function ImageUploadDropzone({ currentImageUrl, onImageSelected, isLoadin
               className="object-cover"
               onError={(e) => {
                 console.error("ImageUploadDropzone preview image failed to load:", displayImage);
-                (e.target as HTMLImageElement).src = defaultPlaceholderUrl; // Fallback
-                setPreview(defaultPlaceholderUrl); // Actualiza el estado para que el fallback se muestre correctamente
+                (e.target as HTMLImageElement).src = defaultPlaceholderUrl; 
+                setPreview(defaultPlaceholderUrl); 
               }}
             />
             {!isLoading && (

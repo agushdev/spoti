@@ -5,7 +5,7 @@ import { motion } from "framer-motion"
 
 type Props = {
   title?: string
-  coverUrl?: string // Esto puede ser /ruta/a/img.png (de FastAPI o estático) o http://full.url
+  coverUrl?: string 
   count?: number
 }
 
@@ -14,24 +14,18 @@ export function PlaylistCard({
   coverUrl, 
   count = 0,
 }: Props) {
-  // Define una URL de placeholder por defecto que siempre es válida
   const defaultPlaceholderUrl = `https://placehold.co/64x64/E0E0E0/A0A0A0?text=Playlist`;
   
   let finalCoverSource: string;
 
-  // ✅ LÓGICA DE URL SIMPLIFICADA Y ROBUSTA:
   if (typeof coverUrl === 'string' && coverUrl.trim() !== '') {
-    // Si la URL ya empieza con http:// o https:// (es una URL completa)
-    // O si empieza con '/' (como /cover_art/filename.jpg, que Next.js sirve desde /public)
     if (coverUrl.startsWith('http://') || coverUrl.startsWith('https://') || coverUrl.startsWith('/')) {
       finalCoverSource = coverUrl;
     } 
-    // Si es solo un nombre de archivo (ej., "mi_portada.jpg"), asumimos que está en public/cover_art
     else {
       finalCoverSource = `/cover_art/${coverUrl}`;
     }
   } else {
-    // Si coverUrl es nulo, indefinido o una cadena vacía, usa el placeholder por defecto
     finalCoverSource = defaultPlaceholderUrl;
   }
 
@@ -43,7 +37,7 @@ export function PlaylistCard({
           alt={`Portada de ${title}`} 
           fill 
           className="object-cover" 
-          // Manejo de errores en caso de que la imagen no cargue
+          
           onError={(e) => {
             console.error("PlaylistCard image failed to load:", finalCoverSource);
             (e.target as HTMLImageElement).src = defaultPlaceholderUrl; 

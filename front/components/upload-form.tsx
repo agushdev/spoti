@@ -5,13 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Spinner } from "@/components/ui/spinner"; // Assuming you have a Spinner component
+import { Spinner } from "@/components/ui/spinner"; 
 
 export function UploadForm() {
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [album, setAlbum] = useState("");
-  const [duration, setDuration] = useState(""); // Consider a better input type for duration later
+  const [duration, setDuration] = useState(""); 
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [coverArt, setCoverArt] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,11 +39,10 @@ export function UploadForm() {
       formData.append("cover_art", coverArt);
     }
 
-    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-    const apiBaseUrl = `http://${host}:8000`;
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/upload`, {
+      const response = await fetch(`${API_BASE_URL}/api/upload`, {
         method: "POST",
         body: formData,
       });

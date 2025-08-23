@@ -6,7 +6,6 @@ import { TrackCard } from "@/components/track-card"
 import { SearchInput } from "@/components/search-input"
 import { cn } from "@/lib/utils"
 
-// Define la estructura de los datos que vienen del backend
 type Track = {
   id: number;
   title: string;
@@ -17,7 +16,6 @@ type Track = {
   tags?: string[];
 };
 
-// ✅ CÓDIGO CORREGIDO: Nuevo array de filtros
 const FILTERS = ["Todo", "Rock"]
 
 export function DiscoverClient() {
@@ -25,12 +23,12 @@ export function DiscoverClient() {
   const [active, setActive] = useState("Todo")
   const [tracks, setTracks] = useState<Track[]>([])
   const [isLoading, setIsLoading] = useState(true);
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
   useEffect(() => {
     async function fetchTracks() {
       try {
-        const host = typeof window !== 'undefined' ? window.location.hostname : '192.168.0.107';
-        const response = await fetch(`http://${host}:8000/api/tracks`);
+        const response = await fetch(`http://${API_BASE_URL}:8000/api/tracks`);
 
         if (!response.ok) {
           throw new Error('Network response was not ok');

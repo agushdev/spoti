@@ -13,12 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from 'sonner';
-import { ImageUploadDropzone } from "./image-upload-dropzone"; // ✅ Importamos el componente de subida de imagen
+import { ImageUploadDropzone } from "./image-upload-dropzone"; 
 
 type AddPlaylistDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onPlaylistCreated: () => void; // Callback para notificar al padre
+  onPlaylistCreated: () => void; 
 };
 
 export function AddPlaylistDialog({
@@ -27,10 +27,9 @@ export function AddPlaylistDialog({
   onPlaylistCreated,
 }: AddPlaylistDialogProps) {
   const [playlistName, setPlaylistName] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null); // ✅ Nuevo estado para la imagen seleccionada
+  const [selectedFile, setSelectedFile] = useState<File | null>(null); 
   const [isLoading, setIsLoading] = useState(false);
 
-  // ✅ Callback para manejar la selección de imagen desde ImageUploadDropzone
   const handleImageSelected = useCallback((file: File | null) => {
     setSelectedFile(file);
   }, []);
@@ -43,20 +42,17 @@ export function AddPlaylistDialog({
 
     setIsLoading(true);
     try {
-      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      const apiBaseUrl = `http://${host}:8000`;
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000'; 
 
       const formData = new FormData();
       formData.append("name", playlistName);
       if (selectedFile) {
-        formData.append("artwork_file", selectedFile); // ✅ Añadir el archivo de imagen si existe
+        formData.append("artwork_file", selectedFile); 
       }
 
-      const response = await fetch(`${apiBaseUrl}/api/playlists`, {
+      const response = await fetch(`${API_BASE_URL}/api/playlists`, {
         method: 'POST',
-        // ✅ No necesitamos Content-Type si enviamos FormData, el navegador lo configura automáticamente
-        // headers: { 'Content-Type': 'application/json' }, 
-        body: formData, // ✅ Enviar FormData
+        body: formData,
       });
 
       if (!response.ok) {
@@ -75,13 +71,12 @@ export function AddPlaylistDialog({
       toast.success("Playlist creada exitosamente.", {
         description: `"${playlistName}" ha sido creada.`,
       });
-      setPlaylistName(""); // Limpiar el campo
-      setSelectedFile(null); // ✅ Limpiar la imagen seleccionada
-      onOpenChange(false); // Cerrar el diálogo
-      onPlaylistCreated(); // Notificar al padre para que recargue la lista
+      setPlaylistName("");
+      setSelectedFile(null); 
+      onOpenChange(false); 
+      onPlaylistCreated(); 
     } catch (error) {
       console.error("Error al crear playlist:", error);
-      // El toast de error ya se manejó arriba para errores de red o del servidor
     } finally {
       setIsLoading(false);
     }
@@ -89,7 +84,7 @@ export function AddPlaylistDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]"> {/* ✅ Aumentado el ancho para la imagen */}
+      <DialogContent className="sm:max-w-[480px]"> 
         <DialogHeader>
           <DialogTitle>Crear nueva playlist</DialogTitle>
           <DialogDescription>
@@ -111,11 +106,10 @@ export function AddPlaylistDialog({
             />
           </div>
 
-          {/* ✅ Nuevo: Componente de Subida de Imagen */}
           <div className="flex flex-col items-center gap-2 mt-4">
             <Label className="font-medium text-neutral-700">Carátula (Opcional)</Label>
             <ImageUploadDropzone 
-              currentImageUrl={selectedFile ? URL.createObjectURL(selectedFile) : null} // Mostrar vista previa del archivo
+              currentImageUrl={selectedFile ? URL.createObjectURL(selectedFile) : null} 
               onImageSelected={handleImageSelected}
               isLoading={isLoading}
             />
@@ -125,7 +119,7 @@ export function AddPlaylistDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
             Cancelar
           </Button>
-          <Button onClick={handleCreatePlaylist} disabled={isLoading || !playlistName.trim()}> {/* Deshabilitar si no hay nombre */}
+          <Button onClick={handleCreatePlaylist} disabled={isLoading || !playlistName.trim()}> 
             {isLoading ? "Creando..." : "Crear Playlist"}
           </Button>
         </DialogFooter>

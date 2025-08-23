@@ -33,8 +33,8 @@ export function DesktopPlayerControls() {
     loopMode,
     toggleShuffle,
     toggleLoop,
-    toggleLyricsPanel, // ¡Importante! Aquí se importa la función para el panel de letras
-    showLyricsPanel, // Para saber si el botón debe estar activo
+    toggleLyricsPanel, 
+    showLyricsPanel, 
   } = usePlayer();
 
   const vol = Math.round(volume * 100);
@@ -175,14 +175,14 @@ export function DesktopPlayerControls() {
             <span className="text-xs text-neutral-500 tabular-nums w-8 text-right">{vol}</span>
           </div>
           {/* Botón de Letras - ¡Ahora toggles showLyricsPanel! */}
-          {current?.lyrics_lrc && ( // Solo muestra el botón si hay letras
+          {current?.lyrics_lrc && ( 
             <Button
               variant="ghost"
               size="icon"
-              onClick={toggleLyricsPanel} // ✅ Llama a la nueva función
+              onClick={toggleLyricsPanel} 
               className={cn(
                 "rounded-full hover:bg-neutral-100",
-                showLyricsPanel ? "text-black" : "text-neutral-500" // Activo si el panel está abierto
+                showLyricsPanel ? "text-black" : "text-neutral-500" 
               )}
               aria-label="Mostrar/ocultar letras"
             >

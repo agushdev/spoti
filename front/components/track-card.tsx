@@ -31,13 +31,9 @@ export function TrackCard({ track, queue = [], onRemoveFromPlaylist }: Props) {
   let imageUrl: string;
 
   if (typeof track.artwork_url === 'string' && track.artwork_url.trim() !== '') {
-    // Si la URL empieza con '/', asume que es una ruta estática de Next.js (ej: /cover_art/piti.jpg)
-    // Si ya es una URL completa (http/https), úsala directamente.
-    // No necesita http://${host}:8000 porque Next.js las sirve desde /public
     if (track.artwork_url.startsWith('/') || track.artwork_url.startsWith('http://') || track.artwork_url.startsWith('https://')) {
       imageUrl = track.artwork_url;
     } else {
-      // Si es solo un nombre de archivo (ej., "piti.jpg"), asume que está en public/cover_art
       imageUrl = `/cover_art/${track.artwork_url}`;
     }
   } else {

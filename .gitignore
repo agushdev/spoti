@@ -1,8 +1,8 @@
 # Ignorar node_modules y build de Next.js dentro de front
 /front/node_modules/
 /front/.next/
-/front/public/
-
+/front/public/audio
+/front/public/cover_art
 /back/__pycache__/
 /back/*.pyc
 env/

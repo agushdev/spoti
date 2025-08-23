@@ -8,7 +8,7 @@ import { ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from "@/components/ui/use-toast";
 
-// Definir el tipo de Track para el frontend
+
 type Track = {
   id: number;
   title: string;
@@ -19,12 +19,11 @@ type Track = {
   audio_url: string;
 };
 
-// ✅ MODIFICACIÓN CLAVE: Incluir 'artwork_url' en el tipo Playlist
 type Playlist = {
   id: number;
   name: string;
   tracks: Track[];
-  artwork_url?: string | null; // La URL de la carátula de la playlist en sí
+  artwork_url?: string | null; 
 };
 
 export default function BibliotecaPage() {
@@ -32,13 +31,14 @@ export default function BibliotecaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000'; 
+
   useEffect(() => {
     async function fetchPlaylists() {
       try {
-        const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-        const apiUrl = `http://${host}:8000/api/playlists`;
-        console.log("Fetching playlists from:", apiUrl);
-        
+        const apiUrl = `${API_BASE_URL}/api/playlists`;
+        console.log("Fetching playlists from:", apiUrl); // log temporalmente para verificar la URL
+
         const response = await fetch(apiUrl);
         
         if (!response.ok) {
@@ -65,7 +65,7 @@ export default function BibliotecaPage() {
       }
     }
     fetchPlaylists();
-  }, [toast]);
+  }, [API_BASE_URL, toast]); 
 
   if (isLoading) {
     return <div className="p-10 text-center text-neutral-500">Cargando tu biblioteca...</div>;
@@ -89,7 +89,6 @@ export default function BibliotecaPage() {
                 <PlaylistCard
                   title={playlist.name}
                   count={playlist.tracks.length}
-                  // ✅ MODIFICACIÓN: Priorizar playlist.artwork_url si existe
                   coverUrl={playlist.artwork_url || (playlist.tracks.length > 0 ? playlist.tracks[0].artwork_url : "/minimal-covers-grid.png")}
                 />
               </Link>

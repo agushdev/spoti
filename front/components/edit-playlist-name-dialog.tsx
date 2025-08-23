@@ -18,7 +18,7 @@ type EditPlaylistNameDialogProps = {
   onOpenChange: (v: boolean) => void;
   playlistId: number;
   currentName: string;
-  onPlaylistUpdated: () => void; // Callback para que la página de la playlist se recargue
+  onPlaylistUpdated: () => void; 
 };
 
 export function EditPlaylistNameDialog({
@@ -30,7 +30,7 @@ export function EditPlaylistNameDialog({
 }: EditPlaylistNameDialogProps) {
   const [newPlaylistName, setNewPlaylistName] = useState(currentName);
   const [isSaving, setIsSaving] = useState(false);
-  const host = typeof window !== 'undefined' ? window.location.hostname : '192.168.0.107';
+ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
   const handleSaveName = async () => {
     if (!newPlaylistName.trim()) {
@@ -38,14 +38,14 @@ export function EditPlaylistNameDialog({
       return;
     }
     if (newPlaylistName.trim() === currentName) {
-      onOpenChange(false); // Si no hay cambios, solo cierra el diálogo
+      onOpenChange(false); 
       return;
     }
 
     setIsSaving(true);
     try {
-      const response = await fetch(`http://${host}:8000/api/playlists/${playlistId}`, {
-        method: 'PATCH', // Usar PATCH para actualizar parcialmente
+      const response = await fetch(`http://${API_BASE_URL}:8000/api/playlists/${playlistId}`, {
+        method: 'PATCH', 
         headers: {
           'Content-Type': 'application/json',
         },
@@ -56,8 +56,8 @@ export function EditPlaylistNameDialog({
         const errorBody = await response.json();
         throw new Error(errorBody.detail || 'Error al actualizar el nombre de la playlist.');
       }
-      onPlaylistUpdated(); // Notifica a la página de la playlist para que se actualice
-      onOpenChange(false); // Cierra el diálogo
+      onPlaylistUpdated(); 
+      onOpenChange(false); 
     } catch (error: any) {
       console.error("Failed to update playlist name:", error);
       alert(error.message);
@@ -66,7 +66,6 @@ export function EditPlaylistNameDialog({
     }
   };
 
-  // Restablecer el nombre cuando se abre el diálogo con un nuevo currentName
   React.useEffect(() => {
     setNewPlaylistName(currentName);
   }, [currentName, open]);

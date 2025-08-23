@@ -14,14 +14,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
-import { ImageUploadDropzone } from './image-upload-dropzone'; // ✅ Importar el nuevo componente
+import { ImageUploadDropzone } from './image-upload-dropzone'; 
 
 export function CreatePlaylistButton() {
   const [playlistName, setPlaylistName] = useState("");
-  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null); // ✅ Nuevo estado para el archivo de imagen
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null); 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const { toast } = useToast();
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
   const handleCreatePlaylist = async () => {
     if (!playlistName.trim()) {
@@ -35,22 +36,18 @@ export function CreatePlaylistButton() {
 
     setIsCreating(true);
     try {
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://${window.location.hostname}:8000`;
       
-      console.log("Intentando crear playlist en:", `${apiBaseUrl}/api/playlists`);
+      console.log("Intentando crear playlist en:", `${API_BASE_URL}/api/playlists`);
 
-      const formData = new FormData(); // ✅ Usar FormData para enviar archivos y datos de formulario
+      const formData = new FormData(); 
       formData.append("name", playlistName);
       if (selectedImageFile) {
-        formData.append("artwork_file", selectedImageFile); // ✅ Añadir el archivo de imagen
+        formData.append("artwork_file", selectedImageFile); 
       }
 
-      const response = await fetch(`${apiBaseUrl}/api/playlists`, {
+      const response = await fetch(`${API_BASE_URL}/api/playlists`, {
         method: 'POST',
-        // No establecer 'Content-Type' cuando se usa FormData; el navegador lo hace automáticamente
-        // con el boundary correcto para archivos.
-        // headers: { 'Accept': 'application/json' }, 
-        body: formData, // ✅ Enviar FormData
+        body: formData, 
       });
 
       if (!response.ok) {
@@ -75,7 +72,7 @@ export function CreatePlaylistButton() {
       }
 
       setPlaylistName("");
-      setSelectedImageFile(null); // ✅ Limpiar el archivo seleccionado
+      setSelectedImageFile(null); 
       setIsDialogOpen(false);
       
       toast({
@@ -98,7 +95,7 @@ export function CreatePlaylistButton() {
 
   const handleFileChange = useCallback((file: File | null) => {
     setSelectedImageFile(file);
-  }, []);
+  }, [API_BASE_URL]);
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
