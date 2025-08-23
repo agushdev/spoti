@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
   "name": "spoti",
-=======
-  "name": "spoti-front",
->>>>>>> a740774f6458f7c092785f7c3cb8963ad53d6515
   "version": "0.1.0",
   "private": true,
   "scripts": {

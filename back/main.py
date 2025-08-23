@@ -9,32 +9,20 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from pathlib import Path 
 from database import engine, Base, get_db
-<<<<<<< HEAD
-from back.models import Playlist, Track 
-from back.schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse, ReorderTracksRequest, PlaylistUpdate, TrackUpdate 
+from models import Playlist, Track 
+from schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse, ReorderTracksRequest, PlaylistUpdate, TrackUpdate 
 
 app = FastAPI(
     title="Spoti",
     description="API para la aplicación de streaming de música Spoti.",
     version="1.0.0",
-=======
-from models import Playlist, Track 
-from schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse, ReorderTracksRequest, PlaylistUpdate, TrackUpdate 
-
-app = FastAPI(
-    title="Spoti Backend"
->>>>>>> a740774f6458f7c092785f7c3cb8963ad53d6515
 )
 
 # CORS
 origins = [
-<<<<<<< HEAD
+    "https://spoti-front.vercel.app",
     "http://localhost:3000",
     "*" 
-=======
-    "https://spoti-front.onrender.com",
-    "http://localhost:3000"
->>>>>>> a740774f6458f7c092785f7c3cb8963ad53d6515
 ]
 app.add_middleware(
     CORSMiddleware,
