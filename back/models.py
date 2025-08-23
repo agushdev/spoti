@@ -2,9 +2,8 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Table
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from typing import List, Optional
 
-from .database import Base
+from database import Base
 
-# Tabla de asociación para la relación muchos a muchos entre playlists y tracks
 playlist_tracks = Table(
     "playlist_tracks",
     Base.metadata,
@@ -18,7 +17,6 @@ class Playlist(Base):
     name: Mapped[str] = mapped_column(String, index=True, unique=True)
     artwork_url: Mapped[Optional[str]] = mapped_column(String, nullable=True) 
 
-    # Relación "muchos a muchos" con el modelo Track
     tracks: Mapped[List["Track"]] = relationship(
         "Track",
         secondary=playlist_tracks,
@@ -36,7 +34,6 @@ class Track(Base):
     audio_url: Mapped[str] = mapped_column(String, unique=True)
     lyrics_lrc: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
-    # Relación "muchos a muchos" con el modelo Playlist
     playlists: Mapped[List["Playlist"]] = relationship(
         "Playlist",
         secondary=playlist_tracks,

@@ -7,26 +7,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
-from pathlib import Path # Importar Path para manejo robusto de rutas de archivo
-
-# Importa los modelos de la base de datos
-from .database import engine, Base, get_db
+from pathlib import Path 
+from database import engine, Base, get_db
 from back.models import Playlist, Track 
-# ✅ Importa todos los esquemas necesarios, incluyendo PlaylistUpdate, ReorderTracksRequest y TrackUpdate
 from back.schemas import PlaylistCreate, PlaylistResponse, TrackBase, PagedTracksResponse, ReorderTracksRequest, PlaylistUpdate, TrackUpdate 
 
 app = FastAPI(
-    title="Minimalist Music Stream API",
-    description="API for a minimalist music streaming application.",
+    title="Spoti",
+    description="API para la aplicación de streaming de música Spoti.",
     version="1.0.0",
 )
 
-# Configuración de CORS
+# CORS
 origins = [
     "http://localhost:3000",
-    # Añade aquí la IP de tu PC si la usas directamente desde el móvil
-    # Por ejemplo: "http://192.168.0.107:3000",
-    "*" # Permite todos los orígenes para facilitar el desarrollo, ajustar en producción
+    "*" 
 ]
 app.add_middleware(
     CORSMiddleware,
@@ -37,7 +32,7 @@ app.add_middleware(
 )
 
 
-# Evento de inicio para crear las tablas si no existen
+# Crea tablas al principio
 @app.on_event("startup")
 async def startup():
     async with engine.begin() as conn:
@@ -47,7 +42,7 @@ async def startup():
 
 @app.get("/")
 async def read_root():
-    return {"message": "Welcome to the Music Stream API!"}
+    return {"message": "Funciona joya"}
 
 @app.get("/api/tracks", response_model=PagedTracksResponse) 
 async def read_tracks(
@@ -78,7 +73,7 @@ async def read_tracks(
             "duration": t.duration,
             "artwork_url": t.artwork_url,
             "audio_url": t.audio_url,
-            "lyrics_lrc": t.lyrics_lrc, # ✅ Incluir lyrics_lrc en la respuesta de /api/tracks
+            "lyrics_lrc": t.lyrics_lrc, 
         })
 
     return {
@@ -107,7 +102,7 @@ async def get_all_playlists(db: AsyncSession = Depends(get_db)):
 
 @app.get("/api/playlists/{playlist_id}", response_model=PlaylistResponse)
 async def get_playlist_by_id(playlist_id: int, db: AsyncSession = Depends(get_db)):
-    """Obtiene una playlist específica por su ID, incluyendo sus canciones."""
+    """Obtiene una playlist específica por su ID, incluyendo las canciones."""
     result = await db.execute(select(Playlist).options(selectinload(Playlist.tracks)).filter(Playlist.id == playlist_id))
     playlist = result.scalars().first()
     if not playlist:
@@ -134,7 +129,7 @@ async def create_playlist(
     artwork_file: Optional[UploadFile] = File(None), 
     db: AsyncSession = Depends(get_db)
 ):
-    """Crea una nueva playlist en la base de datos con una carátula opcional."""
+    """Crea una nueva playlist en la base de datos con una imagen opcional."""
     existing_playlist_result = await db.execute(select(Playlist).filter(Playlist.name == name))
     existing_playlist = existing_playlist_result.scalars().first()
     if existing_playlist:
@@ -157,7 +152,7 @@ async def create_playlist(
                 shutil.copyfileobj(artwork_file.file, buffer)
             artwork_url = f"/cover_art/{unique_filename}"
         except Exception as e:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error al guardar la carátula: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error al guardar la imagen: {e}")
 
     new_playlist = Playlist(name=name, artwork_url=artwork_url) 
     db.add(new_playlist) 
@@ -172,7 +167,7 @@ async def create_playlist(
 
 @app.post("/api/playlists/{playlist_id}/tracks/{track_id}", response_model=PlaylistResponse)
 async def add_track_to_playlist(playlist_id: int, track_id: int, db: AsyncSession = Depends(get_db)):
-    """Añade una canción a una playlist."""
+    """Añade una cancion a una playlist."""
     playlist_result = await db.execute(select(Playlist).options(selectinload(Playlist.tracks)).filter(Playlist.id == playlist_id)) 
     playlist = playlist_result.scalars().first()
 
@@ -182,7 +177,7 @@ async def add_track_to_playlist(playlist_id: int, track_id: int, db: AsyncSessio
     if not playlist:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Playlist no encontrada")
     if not track:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Canción no encontrada")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cancion no encontrada")
 
     if track not in playlist.tracks:
         playlist.tracks.append(track)
@@ -191,9 +186,9 @@ async def add_track_to_playlist(playlist_id: int, track_id: int, db: AsyncSessio
             await db.refresh(playlist) 
         except exc.IntegrityError:
             await db.rollback()
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La canción ya está en esta playlist")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La cancion ya esta en esta playlist")
     else:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La canción ya está en esta playlist")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La cancion ya esta en esta playlist")
         
     return playlist
 
@@ -206,15 +201,15 @@ async def remove_track_from_playlist(playlist_id: int, track_id: int, db: AsyncS
     track = track_result.scalars().first()
 
     if not playlist:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Playlist not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Playlist no encontrada")
     if not track:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Track not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cancion no encontrada")
 
     if track in playlist.tracks:
         playlist.tracks.remove(track)
         await db.commit()
     else:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Track not in playlist")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La cancion no esta en la playlist")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -276,7 +271,7 @@ async def upload_track(
     duration: str = Form(...),
     audio_file: UploadFile = File(...),
     cover_art: Optional[UploadFile] = File(None),
-    lyrics_lrc: Optional[str] = Form(None) # ✅ Nuevo parámetro para las letras LRC
+    lyrics_lrc: Optional[str] = Form(None)
 ):
     """Sube un archivo de audio y su portada, y lo guarda en la base de datos."""
 
@@ -290,7 +285,7 @@ async def upload_track(
         duration=duration,
         audio_url=f"/audio/{audio_filename}", 
         artwork_url=f"/cover_art/{cover_filename}" if cover_filename else None,
-        lyrics_lrc=lyrics_lrc # ✅ Guardar las letras en el modelo Track
+        lyrics_lrc=lyrics_lrc
     )
     
     db.add(new_track)
@@ -303,11 +298,10 @@ async def upload_track(
         "title": new_track.title
     }
 
-# ✅ NUEVO ENDPOINT: Actualizar una canción existente (incluyendo lyrics_lrc)
-@app.patch("/api/tracks/{track_id}", response_model=TrackBase) # Retorna el Track actualizado
+@app.patch("/api/tracks/{track_id}", response_model=TrackBase) 
 async def update_track(
     track_id: int,
-    track_update: TrackUpdate, # Usa el nuevo esquema TrackUpdate
+    track_update: TrackUpdate, 
     db: AsyncSession = Depends(get_db)
 ):
     """Actualiza campos de una canción existente, incluyendo lyrics_lrc."""
@@ -315,19 +309,19 @@ async def update_track(
     track = result.scalars().first()
 
     if not track:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Canción no encontrada")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cancion no encontrada")
 
-    update_data = track_update.model_dump(exclude_unset=True) # Obtiene solo los campos que fueron enviados
+    update_data = track_update.model_dump(exclude_unset=True) 
 
     for key, value in update_data.items():
-        setattr(track, key, value) # Actualiza cada atributo del modelo Track
+        setattr(track, key, value) 
 
     try:
         await db.commit()
-        await db.refresh(track) # Refresca el objeto para que Pydantic lo mapee correctamente
+        await db.refresh(track) 
     except exc.IntegrityError as e:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Error al actualizar la canción: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Error al actualizar la cancion: {e}")
 
     return track
 
