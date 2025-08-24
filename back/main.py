@@ -270,33 +270,30 @@ async def upload_track(
     artist: str = Form(...),
     album: str = Form(...),
     duration: str = Form(...),
-    audio_file: UploadFile = File(...),
-    cover_art: Optional[UploadFile] = File(None),
+    audio_url: str = Form(...),
+    artwork_url: Optional[str] = Form(None),
     lyrics_lrc: Optional[str] = Form(None)
 ):
-    """Sube un archivo de audio y su portada, y lo guarda en la base de datos."""
 
-    audio_filename = Path(audio_file.filename).name
-    cover_filename = Path(cover_art.filename).name if cover_art else None
 
     new_track = Track(
         title=title,
         artist=artist,
         album=album,
         duration=duration,
-        audio_url=f"/audio/{audio_filename}", 
-        artwork_url=f"/cover_art/{cover_filename}" if cover_filename else None,
+        audio_url=audio_url, 
+        artwork_url=artwork_url,
         lyrics_lrc=lyrics_lrc
     )
-    
     db.add(new_track)
     await db.commit()
     await db.refresh(new_track)
     
     return {
-        "message": "Track and cover uploaded successfully!",
+        "message": "Cancion subida con exitoo",
         "track_id": new_track.id,
-        "title": new_track.title
+        "title": new_track.title,
+        "artwork_url": new_track.artwork_url
     }
 
 @app.patch("/api/tracks/{track_id}", response_model=TrackBase) 
