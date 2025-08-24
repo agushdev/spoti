@@ -12,39 +12,43 @@ export function UploadForm() {
   const [artist, setArtist] = useState("");
   const [album, setAlbum] = useState("");
   const [duration, setDuration] = useState(""); 
-  const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [coverArt, setCoverArt] = useState<File | null>(null);
+  const [audioUrl, setAudioUrl] = useState(""); // Cambiado de File a string para URL
+  const [coverArtUrl, setCoverArtUrl] = useState(""); // Cambiado de File a string para URL
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    if (!title || !artist || !album || !duration || !audioFile) {
+    // Validar campos obligatorios, incluyendo la URL de audio
+    if (!title || !artist || !album || !duration || !audioUrl) {
       toast.error("Error al subir", {
-        description: "Por favor, completa todos los campos obligatorios (Título, Artista, Álbum, Duración, Archivo de audio).",
+        description: "Por favor, completa todos los campos obligatorios (Título, Artista, Álbum, Duración, URL de Audio).",
         duration: 5000,
       });
       setIsLoading(false);
       return;
     }
 
-    const formData = new FormData();
-    formData.append("title", title);
-    formData.append("artist", artist);
-    formData.append("album", album);
-    formData.append("duration", duration);
-    formData.append("audio_file", audioFile);
-    if (coverArt) {
-      formData.append("cover_art", coverArt);
-    }
+    // Objeto con los datos a enviar al backend
+    const trackData = {
+      title,
+      artist,
+      album,
+      duration,
+      audio_url: audioUrl, // Enviar la URL de audio
+      cover_art_url: coverArtUrl, // Enviar la URL de la carátula (opcional)
+    };
 
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/upload`, {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json", // Cambiar el tipo de contenido a JSON
+        },
+        body: JSON.stringify(trackData), // Enviar los datos como JSON
       });
 
       if (!response.ok) {
@@ -63,12 +67,8 @@ export function UploadForm() {
       setArtist("");
       setAlbum("");
       setDuration("");
-      setAudioFile(null);
-      setCoverArt(null);
-      const audioInput = document.getElementById("audio-file-input") as HTMLInputElement;
-      if (audioInput) audioInput.value = "";
-      const coverInput = document.getElementById("cover-art-file-input") as HTMLInputElement;
-      if (coverInput) coverInput.value = "";
+      setAudioUrl("");
+      setCoverArtUrl("");
 
     } catch (error: any) {
       console.error("Error uploading track:", error);
@@ -125,7 +125,7 @@ export function UploadForm() {
         <Label htmlFor="duration">Duración (ej. 3:45)</Label>
         <Input
           id="duration"
-          type="text" // Considerar tipo "time" o máscara para un formato estricto
+          type="text" 
           value={duration}
           onChange={(e) => setDuration(e.target.value)}
           placeholder="MM:SS"
@@ -133,24 +133,28 @@ export function UploadForm() {
         />
       </div>
 
+      {/* Campo para la URL del archivo de audio */}
       <div>
-        <Label htmlFor="audio-file-input">Archivo de Audio</Label>
+        <Label htmlFor="audio-url-input">URL del Archivo de Audio</Label>
         <Input
-          id="audio-file-input"
-          type="file"
-          accept="audio/*"
-          onChange={(e) => setAudioFile(e.target.files ? e.target.files[0] : null)}
+          id="audio-url-input"
+          type="url" // Cambiado a tipo "url"
+          value={audioUrl}
+          onChange={(e) => setAudioUrl(e.target.value)}
+          placeholder="https://ejemplo.com/cancion.mp3"
           required
         />
       </div>
 
+      {/* Campo para la URL de la carátula */}
       <div>
-        <Label htmlFor="cover-art-file-input">Carátula del Álbum (Opcional)</Label>
+        <Label htmlFor="cover-art-url-input">URL de la Carátula del Álbum (Opcional)</Label>
         <Input
-          id="cover-art-file-input"
-          type="file"
-          accept="image/*"
-          onChange={(e) => setCoverArt(e.target.files ? e.target.files[0] : null)}
+          id="cover-art-url-input"
+          type="url" // Cambiado a tipo "url"
+          value={coverArtUrl}
+          onChange={(e) => setCoverArtUrl(e.target.value)}
+          placeholder="https://ejemplo.com/caratula.jpg"
         />
       </div>
 
