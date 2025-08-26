@@ -7,22 +7,35 @@ const withPWA = withPWAInit({
   disable: process.env.NODE_ENV === 'development',
   runtimeCaching: [
     {
-      // Estrategia para todos los recursos estáticos (CSS, JS, imágenes, etc.)
-      // Esto asegura que la interfaz de usuario se vea exactamente igual
-      urlPattern: /^https?:\/\/.*\.(?:png|jpg|jpeg|svg|gif|webp|css|js|woff2|woff|ttf|eot|html)$/i,
+      urlPattern: ({ url }) => url.origin === self.location.origin,
+      handler: 'StaleWhileRevalidate',
+      options: {
+        cacheName: 'html-cache',
+        expiration: {
+          maxEntries: 10,
+          maxAgeSeconds: 60 * 60 * 24 * 7, // 7 días
+        },
+        matchOptions: {
+          ignoreSearch: true,
+        },
+      },
+    },
+
+    {
+      urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|css|js|woff2|woff|ttf|eot)$/i,
       handler: 'CacheFirst',
       options: {
         cacheName: 'static-assets-cache',
         expiration: {
-          maxEntries: 100, // Aumenta el número de entradas para asegurar que todo se cachea
-          maxAgeSeconds: 60 * 60 * 24 * 30, // 30 días
+          maxEntries: 100,
+          maxAgeSeconds: 60 * 60 * 24 * 30,
         },
       },
     },
+
     {
-      // Estrategia para los archivos de audio
       urlPattern: /\.(mp3|wav|ogg)$/i,
-      handler: 'CacheFirst', // 'CacheFirst' es perfecto para esto
+      handler: 'CacheFirst',
       options: {
         cacheName: 'audio-cache',
         expiration: {
@@ -30,9 +43,8 @@ const withPWA = withPWAInit({
         },
       },
     },
+
     {
-      // Estrategia de respaldo para otras peticiones (ej. APIs)
-      // Esta estrategia seguirá intentando la red primero.
       urlPattern: /^https?.*/,
       handler: 'NetworkFirst',
       options: {
