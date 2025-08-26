@@ -7,28 +7,39 @@ const withPWA = withPWAInit({
   disable: process.env.NODE_ENV === 'development',
   runtimeCaching: [
     {
-      urlPattern: /^https?.*/, // Expresión regular para que coincida con todas las peticiones
-      handler: 'NetworkFirst', // Estrategia por defecto
+      // Estrategia para todos los recursos estáticos (CSS, JS, imágenes, etc.)
+      // Esto asegura que la interfaz de usuario se vea exactamente igual
+      urlPattern: /^https?:\/\/.*\.(?:png|jpg|jpeg|svg|gif|webp|css|js|woff2|woff|ttf|eot|html)$/i,
+      handler: 'CacheFirst',
       options: {
-        cacheName: 'http-cache',
+        cacheName: 'static-assets-cache',
         expiration: {
-          maxEntries: 10,
-          maxAgeSeconds: 60 * 60 * 24 * 7, // 7 días
-        },
-        cacheableResponse: {
-          statuses: [0, 200],
+          maxEntries: 100, // Aumenta el número de entradas para asegurar que todo se cachea
+          maxAgeSeconds: 60 * 60 * 24 * 30, // 30 días
         },
       },
     },
     {
-      // Esta es la parte importante para cachear las canciones
-      // Usa una URL que coincida con tus archivos de audio, por ejemplo de Dropbox
-      urlPattern: /\.(jpg|mp3|wav|ogg)$/i,
-      handler: 'CacheFirst', // Primero la caché, si no está, la red
+      // Estrategia para los archivos de audio
+      urlPattern: /\.(mp3|wav|ogg)$/i,
+      handler: 'CacheFirst', // 'CacheFirst' es perfecto para esto
       options: {
-        cacheName: 'audio-cache', // Un nombre específico para la caché de audios
+        cacheName: 'audio-cache',
         expiration: {
-          maxEntries: 50, // Límite de audios en caché
+          maxEntries: 50,
+        },
+      },
+    },
+    {
+      // Estrategia de respaldo para otras peticiones (ej. APIs)
+      // Esta estrategia seguirá intentando la red primero.
+      urlPattern: /^https?.*/,
+      handler: 'NetworkFirst',
+      options: {
+        cacheName: 'http-cache',
+        expiration: {
+          maxEntries: 10,
+          maxAgeSeconds: 60 * 60 * 24 * 7,
         },
       },
     },
