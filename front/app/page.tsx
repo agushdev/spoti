@@ -43,10 +43,8 @@
       const [initialLoad, setInitialLoad] = useState(true);
       const [searchTerm, setSearchTerm] = useState("");
 
-      // Define la URL base de la API usando la variable de entorno
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000'; // Fallback para desarrollo
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000'; 
 
-      // ✅ AÑADIR ESTE useEffect PARA DEPURACIÓN
       useEffect(() => {
         console.log("API_BASE_URL que el frontend está usando:", API_BASE_URL);
       }, [API_BASE_URL]);
@@ -59,26 +57,28 @@
           const tracksResponse = await fetch(`${API_BASE_URL}/api/tracks?limit=100`, { 
             headers: { 'Accept': 'application/json' },
           });
-          if (!tracksResponse.ok) {
-            throw new Error(`Failed to fetch tracks: ${tracksResponse.statusText}`);
-          }
-          const pagedTracksData: PagedTracksResponse = await tracksResponse.json();
-          setAllTracks(pagedTracksData.items);
-          setHasMore(pagedTracksData.items.length === 100); 
+          if (tracksResponse.ok) {
+              const pagedTracksData: PagedTracksResponse = await tracksResponse.json();
+              setAllTracks(pagedTracksData.items);
+              setHasMore(pagedTracksData.items.length === 100); 
+          } else {
+              console.warn("Could not fetch tracks from network. Relying on Service Worker cache.");
+          } 
 
           const playlistsResponse = await fetch(`${API_BASE_URL}/api/playlists`, {
             headers: { 'Accept': 'application/json' },
           });
-          if (!playlistsResponse.ok) {
-            throw new Error(`Failed to fetch playlists: ${playlistsResponse.statusText}`);
+          if (playlistsResponse.ok) {
+              const playlistsData: Playlist[] = await playlistsResponse.json();
+              setPlaylists(playlistsData);
+          } else {
+              console.warn("Could not fetch playlists from network. Relying on Service Worker cache.");
           }
-          const playlistsData: Playlist[] = await playlistsResponse.json();
-          setPlaylists(playlistsData);
 
         } catch (error) {
           console.error("Error fetching initial data:", error);
-          toast.error("Error al cargar el contenido inicial.", {
-            description: "Verifica la conexión con el backend.",
+          toast.error("Error de conexion. Mostrando contenido de cache", {
+            description: "Es posible que no tengas conexion a internet.",
             duration: 5000,
           });
         } finally {
