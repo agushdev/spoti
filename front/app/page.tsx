@@ -8,6 +8,7 @@
     import { SearchInput } from "@/components/search-input";
     import { PlaylistCard } from "@/components/playlist-card"; 
     import Link from "next/link"; 
+    import "./pwa-register"
 
     type Track = {
       id: number;
