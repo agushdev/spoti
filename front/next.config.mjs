@@ -5,6 +5,9 @@ const withPWA = withPWAInit({
   register: true, 
   skipWaiting: true,
   disable: process.env.NODE_ENV === 'development',
+  additionalManifestEntries: [
+    { url: '/', revision: '1' },
+  ],
   runtimeCaching: [
     {
       urlPattern: ({ url }) => url.origin === self.location.origin,
@@ -28,7 +31,7 @@ const withPWA = withPWAInit({
         cacheName: 'static-assets-cache',
         expiration: {
           maxEntries: 100,
-          maxAgeSeconds: 60 * 60 * 24 * 30,
+          maxAgeSeconds: 60 * 60 * 24 * 30, // 30 días
         },
       },
     },
@@ -40,6 +43,18 @@ const withPWA = withPWAInit({
         cacheName: 'audio-cache',
         expiration: {
           maxEntries: 50,
+        },
+      },
+    },
+
+    {
+      urlPattern: ({ url }) => url.href.startsWith('https://spoti-backend-9m4j.onrender.com'),
+      handler: 'CacheFirst',
+      options: {
+        cacheName: 'api-cache',
+        expiration: {
+          maxEntries: 50,
+          maxAgeSeconds: 60 * 60 * 24 * 7, // 7 días
         },
       },
     },
