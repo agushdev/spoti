@@ -8,6 +8,9 @@ const withPWA = withPWAInit({
   additionalManifestEntries: [
     { url: '/', revision: '1' },
   ],
+  exclude: [
+    (name) => name.startsWith('/_next/'),
+  ],
   runtimeCaching: [
     {
       urlPattern: ({ url }) => url.origin === self.location.origin,
